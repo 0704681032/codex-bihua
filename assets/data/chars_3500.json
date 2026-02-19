@@ -1,0 +1,454 @@
+[
+  {
+    "char": "笔",
+    "pinyin": "bi3",
+    "radical": "竹",
+    "strokeCount": 10,
+    "examples": ["毛笔", "笔顺", "笔画"],
+    "strokes": [
+      {"order": 1, "svgPath": "M220 200 L420 150"},
+      {"order": 2, "svgPath": "M640 200 L840 150"},
+      {"order": 3, "svgPath": "M200 300 L870 300"},
+      {"order": 4, "svgPath": "M460 110 L410 430"},
+      {"order": 5, "svgPath": "M670 110 L620 430"},
+      {"order": 6, "svgPath": "M250 520 L860 500"},
+      {"order": 7, "svgPath": "M220 620 L880 600"},
+      {"order": 8, "svgPath": "M280 740 L860 700"},
+      {"order": 9, "svgPath": "M510 500 L480 820"},
+      {"order": 10, "svgPath": "M480 820 L880 820"}
+    ]
+  },
+  {
+    "char": "顺",
+    "pinyin": "shun4",
+    "radical": "页",
+    "strokeCount": 9,
+    "examples": ["顺序", "顺利"],
+    "strokes": [
+      {"order": 1, "svgPath": "M220 180 L220 860"},
+      {"order": 2, "svgPath": "M320 220 L320 830"},
+      {"order": 3, "svgPath": "M180 320 L420 300"},
+      {"order": 4, "svgPath": "M180 520 L420 500"},
+      {"order": 5, "svgPath": "M540 180 L860 180"},
+      {"order": 6, "svgPath": "M540 180 L540 700"},
+      {"order": 7, "svgPath": "M540 700 L860 700"},
+      {"order": 8, "svgPath": "M860 180 L860 700"},
+      {"order": 9, "svgPath": "M620 820 L860 760"}
+    ]
+  },
+  {
+    "char": "查",
+    "pinyin": "cha2",
+    "radical": "木",
+    "strokeCount": 9,
+    "examples": ["查询", "检查"],
+    "strokes": [
+      {"order": 1, "svgPath": "M240 250 L840 250"},
+      {"order": 2, "svgPath": "M540 110 L500 400"},
+      {"order": 3, "svgPath": "M540 300 L300 480"},
+      {"order": 4, "svgPath": "M540 300 L780 480"},
+      {"order": 5, "svgPath": "M220 560 L860 560"},
+      {"order": 6, "svgPath": "M240 740 L860 740"},
+      {"order": 7, "svgPath": "M340 560 L340 860"},
+      {"order": 8, "svgPath": "M520 560 L520 860"},
+      {"order": 9, "svgPath": "M700 560 L700 860"}
+    ]
+  },
+  {
+    "char": "询",
+    "pinyin": "xun2",
+    "radical": "言",
+    "strokeCount": 8,
+    "examples": ["询问", "查询"],
+    "strokes": [
+      {"order": 1, "svgPath": "M220 180 L360 160"},
+      {"order": 2, "svgPath": "M250 320 L460 300"},
+      {"order": 3, "svgPath": "M330 180 L300 520"},
+      {"order": 4, "svgPath": "M540 220 L860 220"},
+      {"order": 5, "svgPath": "M540 220 L540 760"},
+      {"order": 6, "svgPath": "M860 220 L860 760"},
+      {"order": 7, "svgPath": "M540 760 L860 760"},
+      {"order": 8, "svgPath": "M610 470 L790 470"}
+    ]
+  },
+  {
+    "char": "画",
+    "pinyin": "hua4",
+    "radical": "田",
+    "strokeCount": 8,
+    "examples": ["笔画", "画图"],
+    "strokes": [
+      {"order": 1, "svgPath": "M180 220 L880 220"},
+      {"order": 2, "svgPath": "M220 220 L220 820"},
+      {"order": 3, "svgPath": "M880 220 L880 820"},
+      {"order": 4, "svgPath": "M220 820 L880 820"},
+      {"order": 5, "svgPath": "M220 520 L880 520"},
+      {"order": 6, "svgPath": "M420 220 L420 820"},
+      {"order": 7, "svgPath": "M620 220 L620 820"},
+      {"order": 8, "svgPath": "M220 360 L880 360"}
+    ]
+  },
+  {
+    "char": "动",
+    "pinyin": "dong4",
+    "radical": "力",
+    "strokeCount": 6,
+    "examples": ["动画", "动词"],
+    "strokes": [
+      {"order": 1, "svgPath": "M220 280 L700 260"},
+      {"order": 2, "svgPath": "M460 130 L430 560"},
+      {"order": 3, "svgPath": "M220 430 L700 410"},
+      {"order": 4, "svgPath": "M760 220 L760 780"},
+      {"order": 5, "svgPath": "M760 520 L920 500"},
+      {"order": 6, "svgPath": "M760 780 L920 820"}
+    ]
+  },
+  {
+    "char": "字",
+    "pinyin": "zi4",
+    "radical": "子",
+    "strokeCount": 6,
+    "examples": ["汉字", "字帖"],
+    "strokes": [
+      {"order": 1, "svgPath": "M280 260 L760 260"},
+      {"order": 2, "svgPath": "M520 120 L500 360"},
+      {"order": 3, "svgPath": "M220 420 L860 420"},
+      {"order": 4, "svgPath": "M380 520 L380 840"},
+      {"order": 5, "svgPath": "M380 660 L720 640"},
+      {"order": 6, "svgPath": "M720 640 L680 860"}
+    ]
+  },
+  {
+    "char": "帖",
+    "pinyin": "tie4",
+    "radical": "巾",
+    "strokeCount": 8,
+    "examples": ["字帖", "帖子"],
+    "strokes": [
+      {"order": 1, "svgPath": "M260 200 L260 860"},
+      {"order": 2, "svgPath": "M180 350 L420 330"},
+      {"order": 3, "svgPath": "M180 540 L420 520"},
+      {"order": 4, "svgPath": "M520 220 L840 220"},
+      {"order": 5, "svgPath": "M520 220 L520 820"},
+      {"order": 6, "svgPath": "M520 520 L840 500"},
+      {"order": 7, "svgPath": "M840 220 L840 820"},
+      {"order": 8, "svgPath": "M520 820 L840 820"}
+    ]
+  },
+  {
+    "char": "火",
+    "pinyin": "huo3",
+    "radical": "火",
+    "strokeCount": 4,
+    "examples": ["火山", "火苗"],
+    "strokes": [
+      {"order": 1, "svgPath": "M500 150 L460 530"},
+      {"order": 2, "svgPath": "M340 370 L160 670"},
+      {"order": 3, "svgPath": "M680 360 L860 680"},
+      {"order": 4, "svgPath": "M500 530 L500 860"}
+    ]
+  },
+  {
+    "char": "方",
+    "pinyin": "fang1",
+    "radical": "方",
+    "strokeCount": 4,
+    "examples": ["方向", "方形"],
+    "strokes": [
+      {"order": 1, "svgPath": "M260 230 L800 230"},
+      {"order": 2, "svgPath": "M540 120 L520 400"},
+      {"order": 3, "svgPath": "M540 400 L280 680"},
+      {"order": 4, "svgPath": "M560 400 L780 860"}
+    ]
+  },
+  {
+    "char": "万",
+    "pinyin": "wan4",
+    "radical": "一",
+    "strokeCount": 3,
+    "examples": ["万一", "千万"],
+    "strokes": [
+      {"order": 1, "svgPath": "M220 260 L860 260"},
+      {"order": 2, "svgPath": "M520 260 L340 760"},
+      {"order": 3, "svgPath": "M520 500 L840 840"}
+    ]
+  },
+  {
+    "char": "必",
+    "pinyin": "bi4",
+    "radical": "心",
+    "strokeCount": 5,
+    "examples": ["必须", "必要"],
+    "strokes": [
+      {"order": 1, "svgPath": "M500 160 L480 760"},
+      {"order": 2, "svgPath": "M300 320 L220 540"},
+      {"order": 3, "svgPath": "M700 320 L840 560"},
+      {"order": 4, "svgPath": "M340 620 L500 820"},
+      {"order": 5, "svgPath": "M520 820 L760 660"}
+    ]
+  },
+  {
+    "char": "出",
+    "pinyin": "chu1",
+    "radical": "凵",
+    "strokeCount": 5,
+    "examples": ["出去", "出来"],
+    "strokes": [
+      {"order": 1, "svgPath": "M240 260 L780 260"},
+      {"order": 2, "svgPath": "M300 260 L300 520"},
+      {"order": 3, "svgPath": "M680 260 L680 520"},
+      {"order": 4, "svgPath": "M160 560 L860 560"},
+      {"order": 5, "svgPath": "M500 560 L500 860"}
+    ]
+  },
+  {
+    "char": "里",
+    "pinyin": "li3",
+    "radical": "里",
+    "strokeCount": 7,
+    "examples": ["里面", "里外"],
+    "strokes": [
+      {"order": 1, "svgPath": "M240 180 L860 180"},
+      {"order": 2, "svgPath": "M240 180 L240 820"},
+      {"order": 3, "svgPath": "M860 180 L860 820"},
+      {"order": 4, "svgPath": "M240 820 L860 820"},
+      {"order": 5, "svgPath": "M240 420 L860 420"},
+      {"order": 6, "svgPath": "M500 180 L500 820"},
+      {"order": 7, "svgPath": "M240 620 L860 620"}
+    ]
+  },
+  {
+    "char": "为",
+    "pinyin": "wei4",
+    "radical": "丶",
+    "strokeCount": 4,
+    "examples": ["为何", "因为"],
+    "strokes": [
+      {"order": 1, "svgPath": "M440 180 L560 300"},
+      {"order": 2, "svgPath": "M260 420 L760 420"},
+      {"order": 3, "svgPath": "M520 300 L460 860"},
+      {"order": 4, "svgPath": "M600 600 L840 820"}
+    ]
+  },
+  {
+    "char": "母",
+    "pinyin": "mu3",
+    "radical": "母",
+    "strokeCount": 5,
+    "examples": ["母亲", "字母"],
+    "strokes": [
+      {"order": 1, "svgPath": "M280 220 L760 220"},
+      {"order": 2, "svgPath": "M520 120 L500 860"},
+      {"order": 3, "svgPath": "M280 420 L760 420"},
+      {"order": 4, "svgPath": "M320 620 L720 620"},
+      {"order": 5, "svgPath": "M340 800 L740 800"}
+    ]
+  },
+  {
+    "char": "可",
+    "pinyin": "ke3",
+    "radical": "口",
+    "strokeCount": 5,
+    "examples": ["可以", "可能"],
+    "strokes": [
+      {"order": 1, "svgPath": "M220 220 L860 220"},
+      {"order": 2, "svgPath": "M220 220 L220 820"},
+      {"order": 3, "svgPath": "M220 520 L760 520"},
+      {"order": 4, "svgPath": "M760 520 L760 820"},
+      {"order": 5, "svgPath": "M220 820 L860 820"}
+    ]
+  },
+  {
+    "char": "登",
+    "pinyin": "deng1",
+    "radical": "癶",
+    "strokeCount": 12,
+    "examples": ["登记", "登山"],
+    "strokes": [
+      {"order": 1, "svgPath": "M300 140 L450 300"},
+      {"order": 2, "svgPath": "M720 140 L570 300"},
+      {"order": 3, "svgPath": "M220 320 L860 320"},
+      {"order": 4, "svgPath": "M320 420 L780 420"},
+      {"order": 5, "svgPath": "M500 320 L500 520"},
+      {"order": 6, "svgPath": "M220 560 L860 560"},
+      {"order": 7, "svgPath": "M260 660 L820 660"},
+      {"order": 8, "svgPath": "M320 760 L780 760"},
+      {"order": 9, "svgPath": "M400 560 L400 880"},
+      {"order": 10, "svgPath": "M600 560 L600 880"},
+      {"order": 11, "svgPath": "M400 880 L600 880"},
+      {"order": 12, "svgPath": "M220 900 L860 900"}
+    ]
+  },
+  {
+    "char": "马",
+    "pinyin": "ma3",
+    "radical": "马",
+    "strokeCount": 3,
+    "examples": ["马上", "马车"],
+    "strokes": [
+      {"order": 1, "svgPath": "M220 300 L820 300"},
+      {"order": 2, "svgPath": "M220 300 L220 760"},
+      {"order": 3, "svgPath": "M220 760 L860 760"}
+    ]
+  },
+  {
+    "char": "凹",
+    "pinyin": "ao1",
+    "radical": "凵",
+    "strokeCount": 5,
+    "examples": ["凹凸", "凹面"],
+    "strokes": [
+      {"order": 1, "svgPath": "M220 220 L220 860"},
+      {"order": 2, "svgPath": "M220 220 L860 220"},
+      {"order": 3, "svgPath": "M860 220 L860 860"},
+      {"order": 4, "svgPath": "M420 220 L420 620"},
+      {"order": 5, "svgPath": "M420 620 L660 620"}
+    ]
+  },
+  {
+    "char": "山",
+    "pinyin": "shan1",
+    "radical": "山",
+    "strokeCount": 3,
+    "examples": ["山川", "高山"],
+    "strokes": [
+      {"order": 1, "svgPath": "M280 240 L280 840"},
+      {"order": 2, "svgPath": "M500 140 L500 840"},
+      {"order": 3, "svgPath": "M740 240 L740 840"}
+    ]
+  },
+  {
+    "char": "人",
+    "pinyin": "ren2",
+    "radical": "人",
+    "strokeCount": 2,
+    "examples": ["人口", "大人"],
+    "strokes": [
+      {"order": 1, "svgPath": "M540 200 L320 820"},
+      {"order": 2, "svgPath": "M560 200 L820 820"}
+    ]
+  },
+  {
+    "char": "大",
+    "pinyin": "da4",
+    "radical": "大",
+    "strokeCount": 3,
+    "examples": ["大小", "大学"],
+    "strokes": [
+      {"order": 1, "svgPath": "M540 180 L500 780"},
+      {"order": 2, "svgPath": "M500 420 L260 760"},
+      {"order": 3, "svgPath": "M520 420 L840 760"}
+    ]
+  },
+  {
+    "char": "小",
+    "pinyin": "xiao3",
+    "radical": "小",
+    "strokeCount": 3,
+    "examples": ["小时", "大小"],
+    "strokes": [
+      {"order": 1, "svgPath": "M520 180 L500 820"},
+      {"order": 2, "svgPath": "M340 380 L200 720"},
+      {"order": 3, "svgPath": "M700 380 L840 720"}
+    ]
+  },
+  {
+    "char": "中",
+    "pinyin": "zhong1",
+    "radical": "丨",
+    "strokeCount": 4,
+    "examples": ["中国", "中心"],
+    "strokes": [
+      {"order": 1, "svgPath": "M240 260 L860 260"},
+      {"order": 2, "svgPath": "M240 260 L240 760"},
+      {"order": 3, "svgPath": "M860 260 L860 760"},
+      {"order": 4, "svgPath": "M540 120 L540 900"}
+    ]
+  },
+  {
+    "char": "国",
+    "pinyin": "guo2",
+    "radical": "囗",
+    "strokeCount": 8,
+    "examples": ["中国", "国家"],
+    "strokes": [
+      {"order": 1, "svgPath": "M220 200 L880 200"},
+      {"order": 2, "svgPath": "M220 200 L220 860"},
+      {"order": 3, "svgPath": "M880 200 L880 860"},
+      {"order": 4, "svgPath": "M220 860 L880 860"},
+      {"order": 5, "svgPath": "M380 360 L740 360"},
+      {"order": 6, "svgPath": "M380 360 L380 700"},
+      {"order": 7, "svgPath": "M740 360 L740 700"},
+      {"order": 8, "svgPath": "M380 700 L740 700"}
+    ]
+  },
+  {
+    "char": "学",
+    "pinyin": "xue2",
+    "radical": "子",
+    "strokeCount": 8,
+    "examples": ["学习", "学生"],
+    "strokes": [
+      {"order": 1, "svgPath": "M320 180 L420 280"},
+      {"order": 2, "svgPath": "M720 180 L620 280"},
+      {"order": 3, "svgPath": "M220 320 L860 320"},
+      {"order": 4, "svgPath": "M520 220 L500 440"},
+      {"order": 5, "svgPath": "M260 500 L820 500"},
+      {"order": 6, "svgPath": "M380 580 L380 860"},
+      {"order": 7, "svgPath": "M380 720 L700 700"},
+      {"order": 8, "svgPath": "M700 700 L660 860"}
+    ]
+  },
+  {
+    "char": "习",
+    "pinyin": "xi2",
+    "radical": "羽",
+    "strokeCount": 3,
+    "examples": ["学习", "练习"],
+    "strokes": [
+      {"order": 1, "svgPath": "M260 320 L760 320"},
+      {"order": 2, "svgPath": "M260 540 L700 540"},
+      {"order": 3, "svgPath": "M380 540 L320 860"}
+    ]
+  },
+  {
+    "char": "生",
+    "pinyin": "sheng1",
+    "radical": "生",
+    "strokeCount": 5,
+    "examples": ["学生", "生日"],
+    "strokes": [
+      {"order": 1, "svgPath": "M540 140 L500 880"},
+      {"order": 2, "svgPath": "M260 360 L820 360"},
+      {"order": 3, "svgPath": "M300 540 L780 540"},
+      {"order": 4, "svgPath": "M220 700 L860 700"},
+      {"order": 5, "svgPath": "M540 700 L540 920"}
+    ]
+  },
+  {
+    "char": "日",
+    "pinyin": "ri4",
+    "radical": "日",
+    "strokeCount": 4,
+    "examples": ["日月", "生日"],
+    "strokes": [
+      {"order": 1, "svgPath": "M280 220 L760 220"},
+      {"order": 2, "svgPath": "M280 220 L280 840"},
+      {"order": 3, "svgPath": "M760 220 L760 840"},
+      {"order": 4, "svgPath": "M280 840 L760 840"}
+    ]
+  },
+  {
+    "char": "月",
+    "pinyin": "yue4",
+    "radical": "月",
+    "strokeCount": 4,
+    "examples": ["日月", "月亮"],
+    "strokes": [
+      {"order": 1, "svgPath": "M300 200 L300 860"},
+      {"order": 2, "svgPath": "M300 200 L760 200"},
+      {"order": 3, "svgPath": "M300 520 L700 500"},
+      {"order": 4, "svgPath": "M760 200 L760 860"}
+    ]
+  }
+]
