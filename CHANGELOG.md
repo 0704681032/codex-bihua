@@ -1,34 +1,34 @@
-# Changelog
+# 更新日志
 
-All notable changes to this project are documented in this file.
+本文件记录项目的重要变更。
 
 ## [Unreleased]
 
-### Added
-- Added authoritative offline Hanzi stroke dataset in `/Users/jyy/Documents/bihua/assets/data/chars_3500.json` (9565 CJK entries, with stroke outlines + median points).
-- Added data provenance and license notes in `/Users/jyy/Documents/bihua/assets/data/LICENSE.md`.
-- Added web and macOS platform targets for local run/debug (`flutter run -d chrome` / `flutter run -d macos`).
+### 新增
+- 新增权威离线汉字笔画数据集：`/Users/jyy/Documents/bihua/assets/data/chars_3500.json`（9565 个 CJK 条目，含笔画轮廓与中线数据）。
+- 新增数据来源与许可说明：`/Users/jyy/Documents/bihua/assets/data/LICENSE.md`。
+- 新增 Web 与 macOS 运行目标，支持本地快速调试：`flutter run -d chrome` / `flutter run -d macos`。
 
-### Changed
-- Updated stroke rendering pipeline:
-  - Uses real glyph stroke outlines for base rendering.
-  - Uses current-stroke highlighting in red during playback.
-  - Supports Y-axis flipping for datasets with inverted coordinates.
-- Updated playback behavior:
-  - Detail page auto-starts playback on open.
-  - Playback speed tuned slower (`speed = 0.6`).
-  - Playback session isolation per detail page instance to avoid stale state reuse.
-- Updated dictionary loading strategy to stop synthetic inflation by default (`minDictionarySize = 0`).
-- Updated README to reflect current runtime behavior, data source, and cache-refresh troubleshooting.
+### 变更
+- 调整笔顺渲染流程：
+  - 底图使用真实笔画轮廓渲染；
+  - 当前笔画使用红色高亮；
+  - 支持坐标系 Y 轴翻转（适配不同数据源坐标方向）。
+- 调整播放行为：
+  - 进入详情页自动播放；
+  - 默认播放速度调慢（`speed = 0.6`）；
+  - 每次详情页会话隔离，避免复用旧播放状态。
+- 调整字库加载策略：默认不再自动合成占位字（`minDictionarySize = 0`）。
+- 更新 README，补充真实运行行为、数据来源与缓存排查说明。
 
-### Fixed
-- Fixed mismatched Hanzi shape/stroke-order presentation for detail page rendering.
-- Fixed initial/detail state inconsistencies that caused incorrect all-black or stale playback states.
-- Fixed multiple widget/unit test mismatches after playback and renderer updates.
+### 修复
+- 修复详情页字形与笔顺显示不一致问题。
+- 修复详情页初始状态异常（整字全黑/播放状态残留）问题。
+- 修复渲染与播放改动后的多处测试不一致问题。
 
 ## [0.1.0] - 2026-02-19
 
-### Added
-- Initial Flutter application structure (`home + detail` pages).
-- Search by Hanzi (1-20 chars), filter entry points (pinyin/stroke count/radical), and stroke-player controls.
-- Unit and widget tests for sanitizer, dictionary behavior, and detail/home interactions.
+### 新增
+- 初始化 Flutter 应用结构（首页 + 详情页）。
+- 支持 1~20 汉字查询、拼音/笔画/部首筛选入口、笔顺播放控制。
+- 新增输入清洗、字库查询、首页与详情页交互等测试用例。
