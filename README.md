@@ -37,6 +37,36 @@ flutter run -d macos
 flutter run -d android
 ```
 
+## Android 安装运行（首次配置）
+
+如果执行 `flutter doctor -v` 出现 `Unable to locate Android SDK`，请按下面配置：
+
+1. 安装 Android Studio，并在首次启动时安装 Android SDK 与 Command-line Tools。
+2. 配置 SDK 路径（将路径替换为你本机实际路径）：
+
+```bash
+flutter config --android-sdk ~/Library/Android/sdk
+```
+
+3. 接受 Android 许可证：
+
+```bash
+flutter doctor --android-licenses
+```
+
+4. 再次检查环境：
+
+```bash
+flutter doctor -v
+```
+
+5. 连接真机（开启开发者模式与 USB 调试）或启动模拟器后运行：
+
+```bash
+flutter devices
+flutter run -d android
+```
+
 ## 关键行为
 
 - 详情页默认状态：整字黑色。
