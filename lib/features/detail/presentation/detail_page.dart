@@ -24,6 +24,8 @@ class DetailPage extends ConsumerStatefulWidget {
 class _DetailPageState extends ConsumerState<DetailPage> {
   late final TextEditingController _searchController;
   final String _playerSessionId = UniqueKey().toString();
+  static const double _autoPlaySpeed = 0.6;
+  String? _autoPlayStartedKey;
 
   @override
   void initState() {
@@ -118,6 +120,20 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           final provider = strokePlayerProvider(key);
           final playerState = ref.watch(provider);
           final player = ref.read(provider.notifier);
+          final autoPlayKey =
+              '${key.sessionId}:${entry.char}:${entry.strokes.length}';
+          if (_autoPlayStartedKey != autoPlayKey) {
+            _autoPlayStartedKey = autoPlayKey;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) {
+                return;
+              }
+              player.setSpeed(_autoPlaySpeed);
+              if (!player.state.isPlaying) {
+                player.togglePlay();
+              }
+            });
+          }
 
           return SafeArea(
             child: Center(

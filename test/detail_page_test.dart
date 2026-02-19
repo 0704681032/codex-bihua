@@ -23,13 +23,13 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('播放'), findsOneWidget);
+    expect(find.text('暂停'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('播放'));
-    await tester.tap(find.text('播放'), warnIfMissed: false);
+    await tester.ensureVisible(find.text('暂停'));
+    await tester.tap(find.text('暂停'), warnIfMissed: false);
     await tester.pump();
 
-    expect(find.text('暂停'), findsOneWidget);
+    expect(find.text('播放'), findsOneWidget);
 
     await tester.binding.setSurfaceSize(null);
   });
