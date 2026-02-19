@@ -9,6 +9,7 @@ class CharacterEntry {
     required this.strokes,
     this.examples = const <String>[],
     this.synthetic = false,
+    this.flipYAxis = false,
   });
 
   final String char;
@@ -18,23 +19,30 @@ class CharacterEntry {
   final List<StrokePath> strokes;
   final List<String> examples;
   final bool synthetic;
+  final bool flipYAxis;
 
   factory CharacterEntry.fromJson(Map<String, dynamic> json) {
+    final parsedStrokes = ((json['strokes'] as List<dynamic>?) ?? const <dynamic>[])
+        .whereType<Map<String, dynamic>>()
+        .map(StrokePath.fromJson)
+        .toList(growable: false);
+    final hasMedianPoints = parsedStrokes.any((stroke) => stroke.medianPoints.isNotEmpty);
+
     return CharacterEntry(
       char: (json['char'] as String?)?.trim() ?? '',
       pinyin: (json['pinyin'] as String?)?.trim() ?? '',
       radical: (json['radical'] as String?)?.trim() ?? '',
       strokeCount: (json['strokeCount'] as num?)?.toInt() ?? 0,
-      strokes: ((json['strokes'] as List<dynamic>?) ?? const <dynamic>[])
-          .whereType<Map<String, dynamic>>()
-          .map(StrokePath.fromJson)
-          .toList(growable: false),
+      strokes: parsedStrokes,
       examples: ((json['examples'] as List<dynamic>?) ?? const <dynamic>[])
           .whereType<String>()
           .map((it) => it.trim())
           .where((it) => it.isNotEmpty)
           .toList(growable: false),
       synthetic: json['synthetic'] == true,
+      flipYAxis: json.containsKey('flipYAxis')
+          ? json['flipYAxis'] == true
+          : hasMedianPoints,
     );
   }
 
@@ -47,6 +55,7 @@ class CharacterEntry {
       'strokes': strokes.map((item) => item.toJson()).toList(growable: false),
       'examples': examples,
       'synthetic': synthetic,
+      'flipYAxis': flipYAxis,
     };
   }
 
@@ -58,6 +67,7 @@ class CharacterEntry {
     List<StrokePath>? strokes,
     List<String>? examples,
     bool? synthetic,
+    bool? flipYAxis,
   }) {
     return CharacterEntry(
       char: char ?? this.char,
@@ -67,6 +77,7 @@ class CharacterEntry {
       strokes: strokes ?? this.strokes,
       examples: examples ?? this.examples,
       synthetic: synthetic ?? this.synthetic,
+      flipYAxis: flipYAxis ?? this.flipYAxis,
     );
   }
 }

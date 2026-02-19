@@ -9,10 +9,10 @@ class StrokePlayerState {
 
   factory StrokePlayerState.initial({required int totalStrokes}) {
     return StrokePlayerState(
-      currentStrokeIndex: 0,
+      currentStrokeIndex: totalStrokes,
       isPlaying: false,
       speed: 0.9,
-      progress: 0,
+      progress: totalStrokes > 0 ? 1 : 0,
       totalStrokes: totalStrokes,
     );
   }

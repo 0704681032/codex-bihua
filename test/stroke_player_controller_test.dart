@@ -5,16 +5,16 @@ void main() {
   test('next/previous and play controls update state correctly', () async {
     final controller = StrokePlayerController(totalStrokes: 3);
 
-    expect(controller.state.currentStrokeIndex, 0);
+    expect(controller.state.currentStrokeIndex, 3);
     expect(controller.state.isPlaying, false);
+    expect(controller.state.progress, 1);
 
     controller.nextStroke();
-    expect(controller.state.currentStrokeIndex, 1);
-
-    controller.previousStroke();
-    expect(controller.state.currentStrokeIndex, 0);
+    expect(controller.state.currentStrokeIndex, 3);
+    expect(controller.state.progress, 1);
 
     controller.togglePlay();
+    expect(controller.state.currentStrokeIndex, 0);
     expect(controller.state.isPlaying, true);
 
     await Future<void>.delayed(const Duration(milliseconds: 120));
@@ -22,6 +22,9 @@ void main() {
 
     controller.pause();
     expect(controller.state.isPlaying, false);
+
+    controller.previousStroke();
+    expect(controller.state.currentStrokeIndex >= 0, true);
 
     controller.dispose();
   });

@@ -23,6 +23,7 @@ class DetailPage extends ConsumerStatefulWidget {
 
 class _DetailPageState extends ConsumerState<DetailPage> {
   late final TextEditingController _searchController;
+  final String _playerSessionId = UniqueKey().toString();
 
   @override
   void initState() {
@@ -52,7 +53,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     }
 
     final target = chars.first;
-    final entry = await ref.read(dictionaryRepositoryProvider).getByChar(target);
+    final entry =
+        await ref.read(dictionaryRepositoryProvider).getByChar(target);
     if (!mounted) {
       return;
     }
@@ -75,7 +77,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
   void _onBottomNavTap(int index) {
     if (index == 0) {
-      Navigator.of(context).pushNamedAndRemoveUntil(AppRouter.home, (route) => false);
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil(AppRouter.home, (route) => false);
       return;
     }
     _showSnack('当前首版仅开放首页与详情页');
@@ -108,77 +111,85 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           }
 
           final key = StrokePlayerKey(
+            sessionId: _playerSessionId,
             char: entry.char,
             totalStrokes: entry.strokes.length,
           );
-          final playerState = ref.watch(strokePlayerProvider(key));
-          final player = ref.read(strokePlayerProvider(key).notifier);
+          final provider = strokePlayerProvider(key);
+          final playerState = ref.watch(provider);
+          final player = ref.read(provider.notifier);
 
           return SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  HanziSearchBar(
-                    controller: _searchController,
-                    hintText: '输入汉字查看笔顺',
-                    onSearchTap: () => _searchAndOpen(_searchController.text),
-                    onSubmitted: _searchAndOpen,
-                    onCameraTap: () => _showSnack('拍照识字将在后续版本开放'),
-                  ),
-                  const SizedBox(height: 18),
-                  _buildPreview(entry),
-                  const SizedBox(height: 14),
-                  _buildFunctionRow(),
-                  const SizedBox(height: 14),
-                  StrokeCanvas(entry: entry, playerState: playerState),
-                  const SizedBox(height: 14),
-                  _buildPlayerControls(playerState, player),
-                  const SizedBox(height: 12),
-                  Row(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.note_add_outlined,
-                          label: '添加到生字本',
-                          onTap: () => _showSnack('已添加到生字本（本地）'),
-                        ),
+                      HanziSearchBar(
+                        controller: _searchController,
+                        hintText: '输入汉字查看笔顺',
+                        onSearchTap: () =>
+                            _searchAndOpen(_searchController.text),
+                        onSubmitted: _searchAndOpen,
+                        onCameraTap: () => _showSnack('拍照识字将在后续版本开放'),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.download_rounded,
-                          label: '下载字帖',
-                          onTap: () => _showSnack('已生成本地字帖任务'),
+                      const SizedBox(height: 18),
+                      _buildPreview(entry),
+                      const SizedBox(height: 14),
+                      _buildFunctionRow(),
+                      const SizedBox(height: 14),
+                      StrokeCanvas(entry: entry, playerState: playerState),
+                      const SizedBox(height: 14),
+                      _buildPlayerControls(playerState, player),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: _ActionButton(
+                              icon: Icons.note_add_outlined,
+                              label: '添加到生字本',
+                              onTap: () => _showSnack('已添加到生字本（本地）'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _ActionButton(
+                              icon: Icons.download_rounded,
+                              label: '下载字帖',
+                              onTap: () => _showSnack('已生成本地字帖任务'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Opacity(
+                        opacity: 0.55,
+                        child: Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.send_outlined,
+                                label: '转发「${entry.char}」字笔顺',
+                                onTap: () => _showSnack('分享功能将在后续版本开放'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.edit_outlined,
+                                label: '写一写',
+                                onTap: () => _showSnack('临摹练习将在后续版本开放'),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Opacity(
-                    opacity: 0.55,
-                    child: Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: _ActionButton(
-                            icon: Icons.send_outlined,
-                            label: '转发「${entry.char}」字笔顺',
-                            onTap: () => _showSnack('分享功能将在后续版本开放'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _ActionButton(
-                            icon: Icons.edit_outlined,
-                            label: '写一写',
-                            onTap: () => _showSnack('临摹练习将在后续版本开放'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           );
@@ -216,23 +227,28 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       children: <Widget>[
         IconButton(
           onPressed: () => _showSnack('语音朗读将在后续版本开放'),
-          icon: const Icon(Icons.volume_up_rounded, color: AppPalette.primaryBrown, size: 34),
+          icon: const Icon(Icons.volume_up_rounded,
+              color: AppPalette.primaryBrown, size: 34),
         ),
         IconButton(
           onPressed: () => _showSnack('会员能力展示占位'),
-          icon: const Icon(Icons.diamond_rounded, color: Colors.redAccent, size: 32),
+          icon: const Icon(Icons.diamond_rounded,
+              color: Colors.redAccent, size: 32),
         ),
         IconButton(
           onPressed: () => _showSnack('主题亮度调节将在后续版本开放'),
-          icon: const Icon(Icons.wb_sunny_outlined, color: AppPalette.textMain, size: 32),
+          icon: const Icon(Icons.wb_sunny_outlined,
+              color: AppPalette.textMain, size: 32),
         ),
         IconButton(
           onPressed: () => _showSnack('田字格模式切换将在后续版本开放'),
-          icon: const Icon(Icons.copy_all_outlined, color: AppPalette.textMain, size: 31),
+          icon: const Icon(Icons.copy_all_outlined,
+              color: AppPalette.textMain, size: 31),
         ),
         IconButton(
           onPressed: () => _showSnack('设置面板将在后续版本开放'),
-          icon: const Icon(Icons.settings_rounded, color: AppPalette.textMain, size: 32),
+          icon: const Icon(Icons.settings_rounded,
+              color: AppPalette.textMain, size: 32),
         ),
       ],
     );
@@ -254,7 +270,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         const SizedBox(width: 8),
         Expanded(
           child: _ActionButton(
-            icon: state.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            icon: state.isPlaying
+                ? Icons.pause_rounded
+                : Icons.play_arrow_rounded,
             label: state.isPlaying ? '暂停' : '播放',
             onTap: controller.togglePlay,
           ),

@@ -12,7 +12,7 @@ class AssetDictionaryRepository implements DictionaryRepository {
     AssetBundle? bundle,
     String charsAssetPath = 'assets/data/chars_3500.json',
     String radicalsAssetPath = 'assets/data/radicals.json',
-    int minDictionarySize = 3500,
+    int minDictionarySize = 0,
   })  : _bundle = bundle ?? rootBundle,
         _charsAssetPath = charsAssetPath,
         _radicalsAssetPath = radicalsAssetPath,

@@ -80,7 +80,7 @@ class _FakeAssetBundle extends CachingAssetBundle {
   Future<String> loadString(String key, {bool cache = true}) async {
     final value = _assets[key];
     if (value == null) {
-      throw FlutterError('Missing key: $key');
+      throw Exception('Missing key: $key');
     }
     return value;
   }

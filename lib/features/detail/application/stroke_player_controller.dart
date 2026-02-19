@@ -11,6 +11,7 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
   }
 
   late final Timer _ticker;
+  static const double _minVisibleProgress = 0.01;
 
   void setTotalStrokes(int total) {
     final safe = total < 0 ? 0 : total;
@@ -30,7 +31,7 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
     if (state.completed) {
       state = state.copyWith(
         currentStrokeIndex: 0,
-        progress: 0,
+        progress: _minVisibleProgress,
         isPlaying: true,
       );
       return;
@@ -48,6 +49,7 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
       return;
     }
 
+    // Keep stepping deterministic: one tap moves to the next stroke and keeps it visible.
     final next = state.currentStrokeIndex + 1;
     if (next >= state.totalStrokes) {
       state = state.copyWith(
@@ -60,7 +62,7 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
 
     state = state.copyWith(
       currentStrokeIndex: next,
-      progress: 0,
+      progress: _minVisibleProgress,
       isPlaying: false,
     );
   }
@@ -83,7 +85,7 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
     if (prev < 0) {
       state = state.copyWith(
         currentStrokeIndex: 0,
-        progress: 0,
+        progress: _minVisibleProgress,
         isPlaying: false,
       );
       return;
@@ -97,11 +99,7 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
   }
 
   void reset() {
-    state = state.copyWith(
-      currentStrokeIndex: 0,
-      progress: 0,
-      isPlaying: false,
-    );
+    state = StrokePlayerState.initial(totalStrokes: state.totalStrokes);
   }
 
   void setSpeed(double speed) {
@@ -137,7 +135,7 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
 
     state = state.copyWith(
       currentStrokeIndex: nextIndex,
-      progress: 0,
+      progress: nextProgress - 1,
       isPlaying: true,
     );
   }
@@ -150,16 +148,19 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
 }
 
 final strokePlayerProvider = StateNotifierProvider.autoDispose
-    .family<StrokePlayerController, StrokePlayerState, StrokePlayerKey>((ref, key) {
+    .family<StrokePlayerController, StrokePlayerState, StrokePlayerKey>(
+        (ref, key) {
   return StrokePlayerController(totalStrokes: key.totalStrokes);
 });
 
 class StrokePlayerKey {
   const StrokePlayerKey({
+    required this.sessionId,
     required this.char,
     required this.totalStrokes,
   });
 
+  final String sessionId;
   final String char;
   final int totalStrokes;
 
@@ -168,10 +169,11 @@ class StrokePlayerKey {
     return identical(this, other) ||
         other is StrokePlayerKey &&
             runtimeType == other.runtimeType &&
+            sessionId == other.sessionId &&
             char == other.char &&
             totalStrokes == other.totalStrokes;
   }
 
   @override
-  int get hashCode => Object.hash(char, totalStrokes);
+  int get hashCode => Object.hash(sessionId, char, totalStrokes);
 }
