@@ -3,7 +3,7 @@
 本项目实现了一个 Android 优先的中文汉字笔画应用首版，包含：
 
 - 首页：1~20 汉字查询、拼音/笔画/部首筛选、汉字举例、易错汉字。
-- 详情页：汉字笔顺展示、播放/暂停、上一笔/下一笔控制。
+- 详情页：汉字笔顺展示、打开页面自动播放（慢速）、播放/暂停、上一笔/下一笔控制。
 - 离线字库：`assets/data/chars_3500.json`（当前为 9565 个真实汉字笔画条目）。
 
 ## 目录
@@ -14,26 +14,49 @@
 - `assets/data` 离线数据
 - `test` 单元测试与 Widget 测试
 
-## 运行
+## 环境与运行
 
-1. 安装 Flutter（建议稳定版）。
+1. 安装 Flutter（建议 stable）。
 2. 在项目根目录执行：
 
 ```bash
 flutter pub get
 flutter test
-flutter test integration_test
-flutter run
 ```
 
-## 说明
-
-- 当前仓库通过手工初始化 Flutter 代码结构；若你本机首次运行报缺失平台目录，可执行：
+3. 按目标平台运行：
 
 ```bash
-flutter create .
+# Web（推荐本地调试）
+flutter run -d chrome
+
+# macOS
+flutter run -d macos
+
+# Android（需本机已安装 Android SDK/设备）
+flutter run -d android
 ```
 
-执行后会补齐 `android/ios/...` 目录，不会覆盖已实现的 `lib/` 业务代码。
+## 关键行为
 
-- `assets/data/chars_3500.json` 来自 Make Me a Hanzi 数据集并已预生成，可直接离线查询与播放笔顺。
+- 详情页默认状态：整字黑色。
+- 打开详情页后自动进入播放，速度为慢速（`speed=0.6`）。
+- 当前笔为红色，已播放笔画为黑色，未播放笔画为浅灰。
+
+## 数据说明
+
+- `assets/data/chars_3500.json` 已替换为真实数据（9565 个 CJK 字），不再使用合成占位笔画。
+- 数据来源：Make Me a Hanzi（`graphics.txt` + `dictionary.txt`）。
+- 许可证说明见：`assets/data/LICENSE.md`。
+
+## 常见问题
+
+- 页面效果看起来和代码不一致（常见于 web 缓存）：
+
+```bash
+flutter clean
+flutter pub get
+flutter run -d chrome
+```
+
+然后在浏览器执行强刷：`Cmd + Shift + R`。
