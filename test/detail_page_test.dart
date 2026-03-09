@@ -33,4 +33,32 @@ void main() {
 
     await tester.binding.setSurfaceSize(null);
   });
+
+  testWidgets('detail page shows info sections and voice button is tappable',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(430, 1400));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          dictionaryRepositoryProvider
+              .overrideWithValue(FakeDictionaryRepository()),
+        ],
+        child: const MaterialApp(
+          home: DetailPage(char: '火'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('基本信息'), findsOneWidget);
+    expect(find.text('笔顺表：共4笔'), findsOneWidget);
+    expect(find.text('汉字解释'), findsOneWidget);
+    expect(find.text('组词举例'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.volume_up_rounded).first);
+    await tester.pump();
+
+    await tester.binding.setSurfaceSize(null);
+  });
 }

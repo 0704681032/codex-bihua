@@ -37,6 +37,37 @@ flutter run -d macos
 flutter run -d android
 ```
 
+## Chrome 运行与 APK 打包
+
+在项目根目录执行：
+
+```bash
+cd /Users/jyy/Documents/bihua
+flutter pub get
+```
+
+### 1) Chrome 运行
+
+```bash
+flutter run -d chrome
+```
+
+### 2) 生成 Android APK（Release）
+
+```bash
+flutter build apk --release
+```
+
+产物路径：
+
+`build/app/outputs/flutter-apk/app-release.apk`
+
+可选（按 ABI 分包，减小单包体积）：
+
+```bash
+flutter build apk --release --split-per-abi
+```
+
 ## Android 安装运行（首次配置）
 
 如果执行 `flutter doctor -v` 出现 `Unable to locate Android SDK`，请按下面配置：
