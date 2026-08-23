@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
+import '../../../core/application/brightness_controller.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/router/web_url.dart' as web_url;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/hanzi_search_bar.dart';
 import '../../../core/widgets/main_bottom_nav.dart';
@@ -26,19 +29,56 @@ class DetailPage extends ConsumerStatefulWidget {
 }
 
 class _DetailPageState extends ConsumerState<DetailPage> {
-  static const double _autoPlaySpeed = 0.6;
+  static const double _autoPlaySpeed = 2.4;
   static const Map<String, List<String>> _presetWords = <String, List<String>>{
     '母': <String>['母亲', '字母', '母子', '母体', '母猪', '酵母'],
     '笔': <String>['毛笔', '画笔', '笔顺', '笔记', '笔画', '执笔'],
     '火': <String>['火山', '火苗', '火候', '火种', '灭火', '火车'],
     '马': <String>['马匹', '马术', '马车', '马上', '马步', '马力'],
+    '万': <String>['万千', '万物', '万里', '万象', '万岁', '百万'],
+  };
+
+  /// Real per-word pinyin for the preset words, so the grid never shows
+  /// fabricated readings.
+  static const Map<String, String> _presetWordPinyins = <String, String>{
+    '万千': 'wàn qiān',
+    '万物': 'wàn wù',
+    '万里': 'wàn lǐ',
+    '万象': 'wàn xiàng',
+    '万岁': 'wàn suì',
+    '百万': 'bǎi wàn',
+    '母亲': 'mǔ qīn',
+    '字母': 'zì mǔ',
+    '母子': 'mǔ zǐ',
+    '母体': 'mǔ tǐ',
+    '母猪': 'mǔ zhū',
+    '酵母': 'jiào mǔ',
+    '毛笔': 'máo bǐ',
+    '画笔': 'huà bǐ',
+    '笔顺': 'bǐ shùn',
+    '笔记': 'bǐ jì',
+    '笔画': 'bǐ huà',
+    '执笔': 'zhí bǐ',
+    '火山': 'huǒ shān',
+    '火苗': 'huǒ miáo',
+    '火候': 'huǒ hou',
+    '火种': 'huǒ zhǒng',
+    '灭火': 'miè huǒ',
+    '火车': 'huǒ chē',
+    '马匹': 'mǎ pī',
+    '马术': 'mǎ shù',
+    '马车': 'mǎ chē',
+    '马上': 'mǎ shàng',
+    '马步': 'mǎ bù',
+    '马力': 'mǎ lì',
   };
 
   late final TextEditingController _searchController;
-  late final FlutterTts _tts;
+  FlutterTts? _tts;
   final String _playerSessionId = UniqueKey().toString();
   String? _autoPlayStartedKey;
-  bool _ttsAvailable = true;
+  bool _ttsInitializing = true;
+  bool _ttsAvailable = false;
 
   bool _basicInfoExpanded = true;
   bool _strokeTableExpanded = true;
@@ -49,7 +89,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   void initState() {
     super.initState();
     _searchController = TextEditingController(text: widget.char);
-    _tts = FlutterTts();
+    // Keep the address bar in sync so a refresh reopens this exact page.
+    web_url.syncDetailUrl(widget.char);
     _initTts();
   }
 
@@ -58,27 +99,85 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.char != widget.char) {
       _searchController.text = widget.char;
+      web_url.syncDetailUrl(widget.char);
+      unawaited(_stopSpeaking());
     }
   }
 
   @override
   void dispose() {
-    _tts.stop();
+    unawaited(_stopSpeaking());
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _initTts() async {
     try {
-      await _tts.setLanguage('zh-CN');
-      await _tts.setSpeechRate(0.45);
-      await _tts.setPitch(1.0);
-      await _tts.awaitSpeakCompletion(true);
+      final tts = FlutterTts();
+
+      // Configure each setting on its own: one unsupported call must not
+      // disable voice playback entirely (platforms differ here).
+      try {
+        await tts.setLanguage('zh-CN');
+      } catch (_) {
+        try {
+          await tts.setLanguage('zh');
+        } catch (_) {}
+      }
+      try {
+        await tts.setSpeechRate(0.45);
+      } catch (_) {}
+      try {
+        await tts.setPitch(1.0);
+      } catch (_) {}
+
+      tts.setErrorHandler((message) {
+        if (mounted && message.isNotEmpty) {
+          _showSnack('语音播放失败，请稍后重试');
+        }
+      });
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _tts = tts;
+        _ttsAvailable = true;
+        _ttsInitializing = false;
+      });
     } on MissingPluginException {
-      _ttsAvailable = false;
+      if (mounted) {
+        setState(() => _ttsInitializing = false);
+      }
     } catch (_) {
-      _ttsAvailable = false;
+      if (mounted) {
+        setState(() => _ttsInitializing = false);
+      }
     }
+  }
+
+  Future<void> _stopSpeaking() async {
+    try {
+      await _tts?.stop();
+    } catch (_) {}
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _onBottomNavTap(int index) {
+    if (index == 0) {
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil(AppRouter.home, (route) => false);
+      return;
+    }
+    _showSnack('当前首版仅开放首页与详情页');
   }
 
   Future<void> _searchAndOpen(String text) async {
@@ -100,42 +199,40 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     }
 
     Navigator.of(context).pushReplacementNamed(
-      AppRouter.detail,
+      AppRouter.detailRouteFor(target),
       arguments: DetailRouteArgs(char: target),
     );
   }
 
-  void _showSnack(String message) {
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  void _onBottomNavTap(int index) {
-    if (index == 0) {
-      Navigator.of(context)
-          .pushNamedAndRemoveUntil(AppRouter.home, (route) => false);
-      return;
-    }
-    _showSnack('当前首版仅开放首页与详情页');
-  }
-
   Future<void> _speakText(String text) async {
-    if (!_ttsAvailable) {
-      _showSnack('当前设备暂不支持语音播放');
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
       return;
     }
+    if (!_ttsAvailable || _tts == null) {
+      _showSnack(
+          _ttsInitializing ? '语音初始化中，请稍候再试' : '当前设备暂不支持语音播放');
+      return;
+    }
+
+    // The web plugin silently ignores speak() while its internal state is
+    // still "playing" right after stop(); give cancel a beat to settle.
     try {
-      await _tts.stop();
-      final result = await _tts.speak(text);
-      if (result != 1) {
+      await _tts!.stop();
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+    } catch (_) {}
+
+    try {
+      // Web resolves with null on success, desktop/other return 1; only a
+      // definitive non-1 value (never null) counts as failure.
+      final result = await _tts!.speak(trimmed);
+      if (result != null && result != 1) {
         _showSnack('语音播放失败，请稍后重试');
       }
     } on MissingPluginException {
-      _ttsAvailable = false;
+      if (mounted) {
+        setState(() => _ttsAvailable = false);
+      }
       _showSnack('当前设备暂不支持语音播放');
     } catch (_) {
       _showSnack('语音播放失败，请稍后重试');
@@ -198,8 +295,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           }
 
           final strokeNames = _resolveStrokeNames(entry);
-          final words = _resolveWordExamples(entry);
-          final explanation = _buildExplanation(entry, words);
+          final words = _resolvePresetWords(entry);
+          final definitions = _resolveDefinitions(entry);
 
           return SafeArea(
             child: Center(
@@ -265,7 +362,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                             _explanationExpanded = !_explanationExpanded;
                           });
                         },
-                        child: _buildExplanationBlock(entry, explanation),
+                        child: _buildExplanationBlock(entry, definitions),
                       ),
                       const SizedBox(height: 10),
                       _SectionCard(
@@ -276,7 +373,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                             _wordsExpanded = !_wordsExpanded;
                           });
                         },
-                        child: _buildWordsGrid(entry, words),
+                        child:
+                            _buildWordsGrid(entry, words),
                       ),
                     ],
                   ),
@@ -320,7 +418,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             ),
           ),
           IconButton(
-            onPressed: () => _showSnack('亮度调节将在后续版本开放'),
+            onPressed: _showBrightnessSheet,
             icon: const Icon(
               Icons.wb_sunny_outlined,
               color: AppPalette.textMain,
@@ -422,14 +520,15 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   Widget _buildStrokeTable(CharacterEntry entry, List<String> strokeNames) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 360 ? 4 : 3;
-        const spacing = 8.0;
+        // Fewer columns on narrow screens keeps each preview readable.
+        final columns = constraints.maxWidth >= 430 ? 4 : 3;
+        const spacing = 10.0;
         final width =
             (constraints.maxWidth - (columns - 1) * spacing) / columns;
 
         return Wrap(
           spacing: spacing,
-          runSpacing: 10,
+          runSpacing: 12,
           children: List<Widget>.generate(entry.strokes.length, (index) {
             final name = index < strokeNames.length
                 ? strokeNames[index]
@@ -440,6 +539,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                 index: index,
                 name: name,
                 entry: entry,
+                tileSize: width,
               ),
             );
           }),
@@ -448,7 +548,11 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     );
   }
 
-  Widget _buildExplanationBlock(CharacterEntry entry, String explanation) {
+  Widget _buildExplanationBlock(
+    CharacterEntry entry,
+    List<String> definitions,
+  ) {
+    final explanation = _buildExplanation(entry, _resolvePresetWords(entry));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -464,11 +568,56 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           '• $explanation',
           style: const TextStyle(fontSize: 17, height: 1.65),
         ),
+        if (definitions.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 10),
+          for (final definition in definitions)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '• $definition',
+                style: const TextStyle(
+                  fontSize: 16,
+                  height: 1.55,
+                  color: Color(0xFF5A4A4A),
+                ),
+              ),
+            ),
+        ],
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: () => _showEncyclopediaSheet(entry),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppPalette.primaryBrown,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(Icons.menu_book_rounded),
+            label: Text(
+              '「${entry.char}」字的百科解释',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildWordsGrid(CharacterEntry entry, List<String> words) {
+  Widget _buildWordsGrid(CharacterEntry entry, List<String>? words) {
+    if (words == null || words.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 18),
+        child: Center(
+          child: Text(
+            '词库建设中，敬请期待',
+            style: TextStyle(fontSize: 15, color: Color(0xFF9A8A8A)),
+          ),
+        ),
+      );
+    }
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -481,6 +630,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       ),
       itemBuilder: (context, index) {
         final word = words[index];
+        final pinyin = _wordPinyin(word);
         return InkWell(
           onTap: () => _speakText(word),
           borderRadius: BorderRadius.circular(10),
@@ -495,16 +645,17 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
-                  Text(
-                    _pseudoPinyin(word, entry.pinyin),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF7B6565),
-                      fontSize: 13,
+                  if (pinyin != null)
+                    Text(
+                      pinyin,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF7B6565),
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
+                  if (pinyin != null) const SizedBox(height: 6),
                   Text(
                     word,
                     style: const TextStyle(
@@ -521,36 +672,116 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     );
   }
 
+  void _showBrightnessSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final brightness = ref.watch(brightnessProvider);
+          final controller = ref.read(brightnessProvider.notifier);
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      const Icon(Icons.nightlight_round,
+                          size: 20, color: AppPalette.textMain),
+                      const SizedBox(width: 8),
+                      const Text(
+                        '屏幕亮度',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w700),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${(brightness * 100).round()}%',
+                        style: const TextStyle(
+                            fontSize: 15, color: AppPalette.primaryBrown),
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    value: brightness,
+                    min: BrightnessController.min,
+                    max: BrightnessController.max,
+                    divisions: 14,
+                    label: '${(brightness * 100).round()}%',
+                    onChanged: controller.set,
+                  ),
+                  const Text(
+                    '网页版通过页面遮罩调节明暗，保护夜间视力',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF9A8A8A)),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildPlayerControls(
     StrokePlayerState state,
     StrokePlayerController controller,
   ) {
-    return Row(
+    return Column(
       children: <Widget>[
-        Expanded(
-          child: _ActionButton(
-            icon: Icons.chevron_left_rounded,
-            label: '上一笔',
-            onTap: controller.previousStroke,
-          ),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: _ActionButton(
+                icon: Icons.chevron_left_rounded,
+                label: '上一笔',
+                onTap: controller.previousStroke,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ActionButton(
+                icon: state.isPlaying
+                    ? Icons.pause_rounded
+                    : Icons.play_arrow_rounded,
+                label: state.isPlaying ? '暂停' : '播放',
+                onTap: controller.togglePlay,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ActionButton(
+                icon: Icons.chevron_right_rounded,
+                label: '下一笔',
+                onTap: controller.nextStroke,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _ActionButton(
-            icon: state.isPlaying
-                ? Icons.pause_rounded
-                : Icons.play_arrow_rounded,
-            label: state.isPlaying ? '暂停' : '播放',
-            onTap: controller.togglePlay,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _ActionButton(
-            icon: Icons.chevron_right_rounded,
-            label: '下一笔',
-            onTap: controller.nextStroke,
-          ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            for (final entry in <double, String>{
+              1.4: '慢速',
+              2.4: '常速',
+              3.2: '快速',
+            }.entries)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: ChoiceChip(
+                  label: Text(entry.value),
+                  selected:
+                      (state.speed - entry.key).abs() < 0.01,
+                  onSelected: (_) => controller.setSpeed(entry.key),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+          ],
         ),
       ],
     );
@@ -561,102 +792,214 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       return const <String>['竖折/竖弯', '横折钩', '点', '横', '点'];
     }
 
-    final names = <String>[];
-    for (var i = 0; i < entry.strokes.length; i += 1) {
-      final median = entry.strokes[i].medianPoints;
-      names.add(_guessStrokeType(median, i + 1));
-    }
-    return names;
-  }
-
-  String _guessStrokeType(List<List<double>> medianPoints, int order) {
-    if (medianPoints.length <= 1) {
-      return '第$order笔';
-    }
-
-    final start = medianPoints.first;
-    final end = medianPoints.last;
-    final dx = end[0] - start[0];
-    final dy = end[1] - start[1];
-    final absDx = dx.abs();
-    final absDy = dy.abs();
-
-    var turning = false;
-    for (var i = 1; i < medianPoints.length - 1; i += 1) {
-      final a = medianPoints[i - 1];
-      final b = medianPoints[i];
-      final c = medianPoints[i + 1];
-      final abx = b[0] - a[0];
-      final aby = b[1] - a[1];
-      final bcx = c[0] - b[0];
-      final bcy = c[1] - b[1];
-      final dot = abx * bcx + aby * bcy;
-      final len =
-          math.sqrt(abx * abx + aby * aby) * math.sqrt(bcx * bcx + bcy * bcy);
-      if (len > 0) {
-        final cos = dot / len;
-        if (cos < 0.75) {
-          turning = true;
-          break;
-        }
-      }
-    }
-
-    if (absDx < 45 && absDy < 45) {
-      return '点';
-    }
-    if (turning) {
-      if (absDx >= absDy) {
-        return '横折';
-      }
-      return '竖折';
-    }
-    if (absDx > absDy * 1.8) {
-      return '横';
-    }
-    if (absDy > absDx * 1.8) {
-      return '竖';
-    }
-    if (dx > 0 && dy > 0) {
-      return '捺';
-    }
-    if (dx < 0 && dy > 0) {
-      return '撇';
-    }
-    return '第$order笔';
-  }
-
-  List<String> _resolveWordExamples(CharacterEntry entry) {
-    final preset = _presetWords[entry.char];
-    if (preset != null) {
-      return preset;
-    }
-
-    final fromData = entry.examples
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty && _containsChinese(item))
-        .toSet()
-        .toList(growable: false);
-    if (fromData.length >= 3) {
-      return fromData.take(6).toList(growable: false);
-    }
-
     return <String>[
-      '${entry.char}字',
-      '${entry.char}形',
-      '${entry.char}体',
-      '${entry.char}音',
-      '${entry.char}义',
-      '${entry.char}文',
+      for (var i = 0; i < entry.strokes.length; i += 1)
+        _classifyStroke(entry, entry.strokes[i].medianPoints, i + 1),
     ];
   }
 
-  String _buildExplanation(CharacterEntry entry, List<String> words) {
-    final wordText = words.take(4).join('、');
+  /// Classifies a stroke by walking its median polyline in *screen*
+  /// coordinates (the asset data is y-up, so flip when needed) and
+  /// splitting it into direction runs.
+  String _classifyStroke(
+    CharacterEntry entry,
+    List<List<double>> medianPoints,
+    int order,
+  ) {
+    if (medianPoints.length < 2) {
+      return '第$order笔';
+    }
+
+    final points = medianPoints
+        .where((p) => p.length >= 2)
+        .map((p) => Offset(p[0], p[1]))
+        .toList(growable: false);
+    if (points.length < 2 || _polylineLength(points) <= 0) {
+      return '第$order笔';
+    }
+
+    // Asset medians use a y-up viewBox; convert to screen space (y-down)
+    // so all direction math matches what the user sees.
+    final screenPoints = entry.flipYAxis
+        ? <Offset>[
+            for (final p in points) Offset(p.dx, _viewBoxSize - p.dy),
+          ]
+        : points;
+
+    final segments =
+        _splitIntoRuns(screenPoints).where(_isSignificantSegment).toList();
+    if (segments.isEmpty) {
+      return '第$order笔';
+    }
+
+    final names = <String>[for (final s in segments) _segmentName(s)];
+    if (_totalLength(segments) < 100) {
+      return '点';
+    }
+    if (names.length == 1) {
+      return names.first;
+    }
+    return _combineSegments(names, segments, screenPoints);
+  }
+
+  static const double _viewBoxSize = 1024;
+
+  Offset _delta(Offset a, Offset b) => b - a;
+
+  double _polylineLength(List<Offset> points) {
+    var sum = 0.0;
+    for (var i = 0; i + 1 < points.length; i += 1) {
+      sum += _delta(points[i], points[i + 1]).distance;
+    }
+    return sum;
+  }
+
+  double _totalLength(List<List<Offset>> segments) {
+    var sum = 0.0;
+    for (final s in segments) {
+      sum += _polylineLength(s);
+    }
+    return sum;
+  }
+
+  /// Splits the polyline at direction changes larger than ~40 degrees,
+  /// merging tiny wobble into the surrounding run.
+  List<List<Offset>> _splitIntoRuns(List<Offset> points) {
+    final runs = <List<Offset>>[<Offset>[points.first]];
+
+    for (var i = 1; i < points.length - 1; i += 1) {
+      final prev = points[i - 1];
+      final cur = points[i];
+      final next = points[i + 1];
+      final turn = _angleBetween(prev, cur, next);
+      if (turn > 0.7 && _delta(prev, cur).distance > 24) {
+        runs.add(<Offset>[cur]);
+      } else {
+        runs.last.add(cur);
+      }
+    }
+    runs.last.add(points.last);
+    return runs;
+  }
+
+  double _angleBetween(Offset a, Offset b, Offset c) {
+    final u = _delta(a, b);
+    final v = _delta(b, c);
+    final lu = u.distance;
+    final lv = v.distance;
+    if (lu == 0 || lv == 0) {
+      return 0;
+    }
+    final cos = (u.dx * v.dx + u.dy * v.dy) / (lu * lv);
+    return math.acos(cos.clamp(-1.0, 1.0).toDouble());
+  }
+
+  bool _isSignificantSegment(List<Offset> segment) =>
+      _polylineLength(segment) > 30;
+
+  String _segmentName(List<Offset> segment) {
+    final start = segment.first;
+    final end = segment.last;
+    final dx = end.dx - start.dx;
+    final dy = end.dy - start.dy;
+    final absDx = dx.abs();
+    final absDy = dy.abs();
+
+    if (absDx > absDy * 2.2) {
+      return dx > 0 ? '横' : '提';
+    }
+    if (absDy > absDx * 2.2) {
+      return dy > 0 ? '竖' : '竖钩';
+    }
+    if (dy > 0) {
+      return dx > 0 ? '捺' : '撇';
+    }
+    return dx > 0 ? '提' : '平撇';
+  }
+
+  /// Maps the leading runs to standard compound stroke names. A trailing
+  /// flick that rises against the main downward flow marks a "钩".
+  String _combineSegments(
+    List<String> names,
+    List<List<Offset>> segments,
+    List<Offset> allPoints,
+  ) {
+    final first = names.first;
+    final second = names.length > 1 ? names[1] : '';
+    final hasHook = _endsWithUpwardFlick(allPoints);
+
+    if (first == '横') {
+      if (second == '竖') {
+        return hasHook ? '横折钩' : '横折';
+      }
+      if (second == '撇' || second == '平撇') {
+        return hasHook ? '横折钩' : '横撇';
+      }
+      if (second == '捺') {
+        return '横折';
+      }
+    }
+    if ((first == '竖') && (second == '横' || second == '提')) {
+      if (hasHook) {
+        return '竖弯钩';
+      }
+      return second == '提' ? '竖提' : '竖折';
+    }
+    if (first == '竖' && second == '竖钩') {
+      return '竖钩';
+    }
+    if (first == '撇' && (second == '横' || second == '提')) {
+      return '撇折';
+    }
+    if (first == '撇' && second == '点') {
+      return '撇点';
+    }
+    return first + second;
+  }
+
+  /// True when the stroke's final samples move noticeably upward against
+  /// the overall downward flow — the little hook at the end of 横折钩 /
+  /// 竖弯钩 style strokes.
+  bool _endsWithUpwardFlick(List<Offset> points) {
+    if (points.length < 3) {
+      return false;
+    }
+    var rise = 0.0;
+    for (var i = points.length - 3; i < points.length - 1; i += 1) {
+      rise += points[i].dy - points[i + 1].dy; // screen y decreasing = up
+    }
+    return rise < -18;
+  }
+
+  /// Curated real words win; otherwise there is nothing honest to show —
+  /// the data asset only carries English definitions, so fabricating
+  /// words/pinyin would repeat the old bug.
+  List<String>? _resolvePresetWords(CharacterEntry entry) {
+    final preset = _presetWords[entry.char];
+    if (preset == null || preset.isEmpty) {
+      return null;
+    }
+    return preset;
+  }
+
+  String? _wordPinyin(String word) => _presetWordPinyins[word];
+
+  List<String> _resolveDefinitions(CharacterEntry entry) {
+    return entry.examples
+        .expand((item) => item.split(';'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  String _buildExplanation(CharacterEntry entry, List<String>? words) {
+    final wordText = words == null || words.isEmpty
+        ? ''
+        : words.take(4).join('、');
     final pinyin = entry.pinyin.trim();
     return '「${entry.char}」读作${pinyin.isEmpty ? '（待补充）' : pinyin}。'
         '部首为${entry.radical}，共${entry.strokeCount}画。'
-        '常见组词：$wordText。';
+        '${wordText.isEmpty ? '' : '常见组词：$wordText。'}';
   }
 
   String _guessStructure(int strokeCount) {
@@ -697,17 +1040,95 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     return map[radical] ?? '待补充';
   }
 
-  String _pseudoPinyin(String word, String pinyin) {
-    final trimmed = pinyin.trim();
-    if (trimmed.isEmpty) {
-      return '';
-    }
-    final count = word.runes.length.clamp(1, 4);
-    return List<String>.filled(count, trimmed).join(' ');
+  void _showEncyclopediaSheet(CharacterEntry entry) {
+    final strokeNames = _resolveStrokeNames(entry);
+    final definitions = _resolveDefinitions(entry);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) => SafeArea(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.55,
+          maxChildSize: 0.85,
+          builder: (context, scrollController) => ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            children: <Widget>[
+              Center(
+                child: Text(
+                  entry.char,
+                  style: const TextStyle(
+                    fontSize: 64,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+              Center(
+                child: Text(
+                  entry.pinyin,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    color: AppPalette.primaryBrown,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _infoRow('部首', entry.radical),
+              _infoRow('笔画数', '${entry.strokeCount}'),
+              _infoRow(
+                '笔顺',
+                strokeNames.isEmpty ? '待补充' : strokeNames.join(' → '),
+              ),
+              const Divider(height: 22),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '释义',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(height: 6),
+              if (definitions.isEmpty)
+                const Text('暂无释义数据', style: TextStyle(fontSize: 15))
+              else
+                for (final definition in definitions)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('• $definition',
+                        style: const TextStyle(fontSize: 15, height: 1.5)),
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  bool _containsChinese(String text) {
-    return RegExp(r'[\u4E00-\u9FFF]').hasMatch(text);
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 72,
+            child: Text(
+              '$label：',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: const TextStyle(fontSize: 15)),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -866,11 +1287,13 @@ class _StrokeTile extends StatelessWidget {
     required this.index,
     required this.name,
     required this.entry,
+    required this.tileSize,
   });
 
   final int index;
   final String name;
   final CharacterEntry entry;
+  final double tileSize;
 
   @override
   Widget build(BuildContext context) {
@@ -883,28 +1306,25 @@ class _StrokeTile extends StatelessWidget {
     );
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
         Text(
           '第${index + 1}笔',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 6),
-        SizedBox(
-          height: 88,
-          child: Center(
-            child: SizedBox.square(
-              dimension: 88,
-              child: StrokeCanvas(entry: entry, playerState: previewState),
-            ),
+        Center(
+          child: SizedBox.square(
+            dimension: tileSize.clamp(0.0, 150.0).toDouble(),
+            child: StrokeCanvas(entry: entry, playerState: previewState),
           ),
         ),
         const SizedBox(height: 4),
         Text(
           name,
-          maxLines: 2,
+          maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 14),
+          style: const TextStyle(fontSize: 15),
         ),
       ],
     );

@@ -188,21 +188,37 @@ class AssetDictionaryRepository implements DictionaryRepository {
     final entries = <CharacterEntry>[];
 
     for (final item in decoded) {
-      if (item is! Map) {
+      if (item is! Map<dynamic, dynamic>) {
         continue;
       }
-      final map = Map<String, dynamic>.from(item as Map<dynamic, dynamic>);
+      final map = Map<String, dynamic>.from(item);
       final parsed = CharacterEntry.fromJson(map);
       if (parsed.char.runes.length != 1) {
         continue;
       }
 
-      final strokeCount = parsed.strokeCount > 0
-          ? parsed.strokeCount
-          : (parsed.strokes.isNotEmpty ? parsed.strokes.length : 6);
+      // Stroke order must follow the stored `order` field; drop entries
+      // without a drawable path and normalize the sequence to 1..n.
+      final orderedStrokes = parsed.strokes
+          .where((stroke) => stroke.svgPath.trim().isNotEmpty)
+          .toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
+      final normalizedStrokes = <StrokePath>[
+        for (var i = 0; i < orderedStrokes.length; i += 1)
+          StrokePath(
+            order: i + 1,
+            svgPath: orderedStrokes[i].svgPath,
+            medianPoints: orderedStrokes[i].medianPoints,
+          ),
+      ];
 
-      final strokes = parsed.strokes.isNotEmpty
-          ? parsed.strokes
+      // The rendered stroke list is the source of truth for the count.
+      final strokeCount = normalizedStrokes.isNotEmpty
+          ? normalizedStrokes.length
+          : (parsed.strokeCount > 0 ? parsed.strokeCount : 6);
+
+      final strokes = normalizedStrokes.isNotEmpty
+          ? normalizedStrokes
           : _generateSyntheticStrokes(strokeCount, parsed.char.runes.first);
 
       entries.add(

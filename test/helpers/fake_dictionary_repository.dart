@@ -103,13 +103,13 @@ final List<CharacterEntry> _defaultEntries = <CharacterEntry>[
       growable: false,
     ),
   ),
-  CharacterEntry(
+  const CharacterEntry(
     char: '火',
     pinyin: 'huo3',
     radical: '火',
     strokeCount: 4,
-    examples: const <String>['火山'],
-    strokes: const <StrokePath>[
+    examples: <String>['火山'],
+    strokes: <StrokePath>[
       StrokePath(order: 1, svgPath: 'M500 150 L460 530'),
       StrokePath(order: 2, svgPath: 'M340 370 L160 670'),
       StrokePath(order: 3, svgPath: 'M680 360 L860 680'),

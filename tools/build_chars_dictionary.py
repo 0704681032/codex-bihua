@@ -141,6 +141,42 @@ def normalize_points(points: object) -> list[list[float]]:
     return normalized
 
 
+def validate_strokes(char: str, strokes: list[dict]) -> None:
+    """Hard-fail on data that would break stroke order or animation.
+
+    Make Me a Hanzi stores every stroke as a closed filled outline plus a
+    median polyline in a flipped (y-up) 1024x1024 coordinate space; the app's
+    animation clips the outline along the median, so both must be present and
+    consistent for every stroke.
+    """
+    problems: list[str] = []
+    seen_orders: list[int] = []
+
+    for index, stroke in enumerate(strokes, start=1):
+        if stroke.get("order") != index:
+            problems.append(f"stroke {index} has order={stroke.get('order')}")
+        seen_orders.append(int(stroke.get("order", -1)))
+        if not str(stroke.get("svgPath", "")).strip():
+            problems.append(f"stroke {index} has empty svgPath")
+        medians = stroke.get("medianPoints") or []
+        if len(medians) < 2:
+            problems.append(f"stroke {index} has fewer than 2 median points")
+        for point in medians:
+            x, y = point[0], point[1]
+            if not (-300 <= x <= 1400 and -300 <= y <= 1400):
+                problems.append(
+                    f"stroke {index} median point out of range: [{x}, {y}]"
+                )
+                break
+
+    if seen_orders != list(range(1, len(strokes) + 1)):
+        problems.append("orders are not a strict 1..n sequence")
+
+    if problems:
+        details = "; ".join(problems[:5])
+        raise ValueError(f"invalid stroke data for '{char}': {details}")
+
+
 def load_dictionary(source: str) -> dict[str, dict]:
     result: dict[str, dict] = {}
     raw_text = read_text(source)
@@ -188,6 +224,8 @@ def load_graphics(source: str) -> tuple[list[str], dict[str, list[dict]]]:
 
         if not strokes:
             continue
+
+        validate_strokes(char, strokes)
 
         order.append(char)
         result[char] = strokes

@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:bihua/features/dictionary/data/asset_dictionary_repository.dart';
 import 'package:bihua/features/dictionary/domain/filter_criteria.dart';
@@ -16,18 +15,18 @@ void main() {
     "char": "笔",
     "pinyin": "bi3",
     "radical": "竹",
-    "strokeCount": 10,
+    "strokeCount": 2,
     "examples": ["笔顺"],
     "strokes": [
-      {"order": 1, "svgPath": "M120 200 L900 200"},
-      {"order": 2, "svgPath": "M160 280 L860 280"}
+      {"order": 2, "svgPath": "M160 280 L860 280"},
+      {"order": 1, "svgPath": "M120 200 L900 200"}
     ]
   },
   {
     "char": "顺",
     "pinyin": "shun4",
     "radical": "页",
-    "strokeCount": 9,
+    "strokeCount": 1,
     "examples": ["顺序"],
     "strokes": [
       {"order": 1, "svgPath": "M200 100 L200 860"}
@@ -48,7 +47,15 @@ void main() {
       final item = await repo.getByChar('笔');
       expect(item, isNotNull);
       expect(item!.pinyin, 'bi3');
-      expect(item.strokeCount, 10);
+      // The rendered stroke list is authoritative: entries are normalized to
+      // sequential orders and the count follows the actual strokes.
+      expect(item.strokeCount, 2);
+      expect(
+        item.strokes.map((s) => s.order),
+        [1, 2],
+        reason: 'strokes must be re-ordered into a strict 1..n sequence',
+      );
+      expect(item.strokes.first.svgPath, 'M120 200 L900 200');
     });
 
     test('inflates dictionary to minimum size', () async {
@@ -65,7 +72,7 @@ void main() {
       final radical = await repo.filter(const FilterCriteria(radical: '页'));
       expect(radical.map((e) => e.char), contains('顺'));
 
-      final strokeCount = await repo.filter(const FilterCriteria(strokeCount: 9));
+      final strokeCount = await repo.filter(const FilterCriteria(strokeCount: 1));
       expect(strokeCount.map((e) => e.char), contains('顺'));
     });
   });

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'stroke_player_state.dart';
@@ -7,11 +8,15 @@ import 'stroke_player_state.dart';
 class StrokePlayerController extends StateNotifier<StrokePlayerState> {
   StrokePlayerController({required int totalStrokes})
       : super(StrokePlayerState.initial(totalStrokes: totalStrokes)) {
-    _ticker = Timer.periodic(const Duration(milliseconds: 30), _onTick);
+    _ticker = Timer.periodic(_tickDuration, _onTick);
   }
 
   late final Timer _ticker;
+  static const Duration _tickDuration = Duration(milliseconds: 16);
   static const double _minVisibleProgress = 0.01;
+  // Matches _tickDuration; a const Duration property can't be used in
+  // another const initializer.
+  static const double _tickSeconds = 0.016;
 
   void setTotalStrokes(int total) {
     final safe = total < 0 ? 0 : total;
@@ -103,11 +108,22 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
   }
 
   void setSpeed(double speed) {
-    final normalized = speed.clamp(0.3, 2.5).toDouble();
+    final normalized = speed.clamp(0.3, 3.0).toDouble();
     state = state.copyWith(speed: normalized);
   }
 
   void _onTick(Timer timer) {
+    _advance();
+  }
+
+  /// Advances the animation by one tick. Exposed for tests so the
+  /// stroke-advance behavior can be verified without real timers.
+  @visibleForTesting
+  void advanceTick() {
+    _advance();
+  }
+
+  void _advance() {
     if (!state.isPlaying || state.totalStrokes == 0) {
       return;
     }
@@ -117,7 +133,7 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
       return;
     }
 
-    final nextProgress = state.progress + 0.03 * state.speed;
+    final nextProgress = state.progress + _tickSeconds * state.speed;
     if (nextProgress < 1) {
       state = state.copyWith(progress: nextProgress);
       return;
@@ -133,9 +149,11 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
       return;
     }
 
+    // Each stroke must animate from its very beginning: never carry the
+    // previous stroke's overshoot into the next one.
     state = state.copyWith(
       currentStrokeIndex: nextIndex,
-      progress: nextProgress - 1,
+      progress: _minVisibleProgress,
       isPlaying: true,
     );
   }

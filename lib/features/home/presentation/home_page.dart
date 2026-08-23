@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/router/app_router.dart';
+import '../../../core/router/web_url.dart' as web_url;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/hanzi_search_bar.dart';
 import '../../../core/widgets/main_bottom_nav.dart';
@@ -29,6 +30,14 @@ class _HomePageState extends ConsumerState<HomePage> {
   List<CharacterEntry> _filterResults = <CharacterEntry>[];
   bool _examplesExpanded = true;
   bool _confusablesExpanded = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Returning home (push or pop) points the browser URL back at the root,
+    // so refreshing never resurrects a stale detail deep link.
+    web_url.syncHomeUrl();
+  }
 
   @override
   void dispose() {
@@ -261,7 +270,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   void _openDetail(String char) {
     Navigator.of(context).pushNamed(
-      AppRouter.detail,
+      AppRouter.detailRouteFor(char),
       arguments: DetailRouteArgs(char: char),
     );
   }
@@ -463,7 +472,7 @@ class _CircleGuidePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppPalette.guideRed.withOpacity(0.55)
+      ..color = AppPalette.guideRed.withValues(alpha: 0.55)
       ..strokeWidth = 2;
 
     _drawDashedLine(canvas, Offset(size.width / 2, 0), Offset(size.width / 2, size.height), paint);

@@ -68,7 +68,7 @@ class _GuideGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppPalette.guideRed.withOpacity(0.55)
+      ..color = AppPalette.guideRed.withValues(alpha: 0.55)
       ..strokeWidth = 1.2;
 
     final centerX = size.width / 2;

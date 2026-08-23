@@ -16,7 +16,7 @@ void main() {
         overrides: <Override>[
           dictionaryRepositoryProvider.overrideWithValue(FakeDictionaryRepository()),
         ],
-        child: MaterialApp(
+        child: const MaterialApp(
           initialRoute: AppRouter.home,
           onGenerateRoute: AppRouter.onGenerateRoute,
         ),
