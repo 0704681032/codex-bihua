@@ -23,5 +23,11 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/data/chars_3500.json
+    # Light per-char metadata (~435 KB): everything the home page needs.
+    - assets/data/chars_index.json
     - assets/data/radicals.json
+    # Full stroke payloads, loaded on demand by the detail page.
+    - assets/data/shards/
+    # Detail-page extras (lazy-loaded once, cached by the OS asset cache):
+    - assets/data/words.json          # CC-CEDICT derived 组词+pinyin
+    - assets/data/definitions_zh.json # 新华字典 derived 中文释义

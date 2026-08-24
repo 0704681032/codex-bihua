@@ -8,13 +8,15 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 import '../../../core/application/brightness_controller.dart';
 import '../../../core/router/app_router.dart';
-import '../../../core/router/web_url.dart' as web_url;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/hanzi_search_bar.dart';
 import '../../../core/widgets/main_bottom_nav.dart';
 import '../../dictionary/application/dictionary_providers.dart';
 import '../../dictionary/application/hanzi_input_sanitizer.dart';
 import '../../dictionary/domain/character_entry.dart';
+import '../../dictionary/domain/stroke_path.dart';
+import '../application/reference_data.dart';
+import '../application/stroke_classifier.dart';
 import '../application/stroke_player_controller.dart';
 import '../application/stroke_player_state.dart';
 import 'widgets/stroke_canvas.dart';
@@ -89,8 +91,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   void initState() {
     super.initState();
     _searchController = TextEditingController(text: widget.char);
-    // Keep the address bar in sync so a refresh reopens this exact page.
-    web_url.syncDetailUrl(widget.char);
     _initTts();
   }
 
@@ -99,7 +99,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.char != widget.char) {
       _searchController.text = widget.char;
-      web_url.syncDetailUrl(widget.char);
       unawaited(_stopSpeaking());
     }
   }
@@ -275,6 +274,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             sessionId: _playerSessionId,
             char: entry.char,
             totalStrokes: entry.strokes.length,
+            strokeWeights: _strokeWeights(entry),
           );
           final provider = strokePlayerProvider(key);
           final playerState = ref.watch(provider);
@@ -295,7 +295,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           }
 
           final strokeNames = _resolveStrokeNames(entry);
-          final words = _resolvePresetWords(entry);
+          // 组词/中文释义来自懒加载的离线数据集; 未就绪或缺失时回退到
+          // 内置词表, 再退到"词库建设中"占位。
+          final datasetWords =
+              ref.watch(wordsForCharProvider(entry.char)).valueOrNull;
+          final zhDefinition =
+              ref.watch(definitionZhProvider(entry.char)).valueOrNull;
+          final wordCards = _resolveWordCards(entry, datasetWords);
           final definitions = _resolveDefinitions(entry);
 
           return SafeArea(
@@ -362,7 +368,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                             _explanationExpanded = !_explanationExpanded;
                           });
                         },
-                        child: _buildExplanationBlock(entry, definitions),
+                        child: _buildExplanationBlock(
+                            entry, definitions, zhDefinition),
                       ),
                       const SizedBox(height: 10),
                       _SectionCard(
@@ -373,8 +380,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                             _wordsExpanded = !_wordsExpanded;
                           });
                         },
-                        child:
-                            _buildWordsGrid(entry, words),
+                        child: _buildWordsGrid(wordCards),
                       ),
                     ],
                   ),
@@ -551,8 +557,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   Widget _buildExplanationBlock(
     CharacterEntry entry,
     List<String> definitions,
+    String? zhDefinition,
   ) {
-    final explanation = _buildExplanation(entry, _resolvePresetWords(entry));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -564,12 +570,20 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          '• $explanation',
-          style: const TextStyle(fontSize: 17, height: 1.65),
-        ),
-        if (definitions.isNotEmpty) ...<Widget>[
+        if (zhDefinition != null && zhDefinition.isNotEmpty) ...<Widget>[
+          Text(
+            '• $zhDefinition',
+            style: const TextStyle(fontSize: 17, height: 1.65),
+          ),
           const SizedBox(height: 10),
+        ] else ...<Widget>[
+          Text(
+            '• ${_buildExplanation(entry, _resolveWordCards(entry, null))}',
+            style: const TextStyle(fontSize: 17, height: 1.65),
+          ),
+          const SizedBox(height: 10),
+        ],
+        if (definitions.isNotEmpty) ...<Widget>[
           for (final definition in definitions)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
@@ -587,7 +601,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         SizedBox(
           height: 52,
           child: ElevatedButton.icon(
-            onPressed: () => _showEncyclopediaSheet(entry),
+            onPressed: () => _showEncyclopediaSheet(entry, zhDefinition),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppPalette.primaryBrown,
               foregroundColor: Colors.white,
@@ -606,8 +620,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     );
   }
 
-  Widget _buildWordsGrid(CharacterEntry entry, List<String>? words) {
-    if (words == null || words.isEmpty) {
+  Widget _buildWordsGrid(List<WordCard> words) {
+    if (words.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 18),
         child: Center(
@@ -629,10 +643,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         childAspectRatio: 1.35,
       ),
       itemBuilder: (context, index) {
-        final word = words[index];
-        final pinyin = _wordPinyin(word);
+        final card = words[index];
+        final pinyin = card.pinyin;
         return InkWell(
-          onTap: () => _speakText(word),
+          onTap: () => _speakText(card.word),
           borderRadius: BorderRadius.circular(10),
           child: Ink(
             decoration: BoxDecoration(
@@ -657,7 +671,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                     ),
                   if (pinyin != null) const SizedBox(height: 6),
                   Text(
-                    word,
+                    card.word,
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
@@ -787,202 +801,101 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     );
   }
 
+  /// Resolution order: authoritative dataset names (disambiguated by
+  /// geometry) -> geometric classifier fallback -> 第N笔 placeholder.
   List<String> _resolveStrokeNames(CharacterEntry entry) {
-    if (entry.char == '母' && entry.strokeCount == 5) {
-      return const <String>['竖折/竖弯', '横折钩', '点', '横', '点'];
+    if (entry.strokeNames.length == entry.strokes.length &&
+        entry.strokeNames.isNotEmpty) {
+      return <String>[
+        for (var i = 0; i < entry.strokeNames.length; i += 1)
+          StrokeClassifier.refineName(
+            entry.strokeNames[i],
+            medianPoints: entry.strokes[i].medianPoints,
+            flipYAxis: entry.flipYAxis,
+          ),
+      ];
     }
 
     return <String>[
       for (var i = 0; i < entry.strokes.length; i += 1)
-        _classifyStroke(entry, entry.strokes[i].medianPoints, i + 1),
+        StrokeClassifier.classify(
+          medianPoints: entry.strokes[i].medianPoints,
+          flipYAxis: entry.flipYAxis,
+          fallback: '第${i + 1}笔',
+        ),
     ];
   }
 
-  /// Classifies a stroke by walking its median polyline in *screen*
-  /// coordinates (the asset data is y-up, so flip when needed) and
-  /// splitting it into direction runs.
-  String _classifyStroke(
+  /// Relative stroke durations from median lengths, normalized so the
+  /// longest stroke plays at 1.0 and short strokes (点) move visibly
+  /// faster. Lengths are measured in glyph coordinates — flipping the y
+  /// axis does not change distances. Strokes without usable medians fall
+  /// back to the mean length instead of snapping to full speed.
+  List<double> _strokeWeights(CharacterEntry entry) {
+    final lengths = <double>[
+      for (final stroke in entry.strokes) _medianPolylineLength(stroke),
+    ];
+    final measured = lengths.where((length) => length > 0).toList();
+    if (measured.isEmpty) {
+      return const <double>[];
+    }
+
+    final maxLength = measured.reduce(math.max);
+    if (maxLength <= 0) {
+      return const <double>[];
+    }
+    final meanLength =
+        measured.fold<double>(0, (sum, length) => sum + length) /
+            measured.length;
+
+    return <double>[
+      for (final length in lengths)
+        ((length > 0 ? length : meanLength) / maxLength)
+            .clamp(0.3, 1.0)
+            .toDouble(),
+    ];
+  }
+
+  double _medianPolylineLength(StrokePath stroke) {
+    var sum = 0.0;
+    for (var i = 0; i + 1 < stroke.medianPoints.length; i += 1) {
+      final a = stroke.medianPoints[i];
+      final b = stroke.medianPoints[i + 1];
+      if (a.length < 2 || b.length < 2) {
+        continue;
+      }
+      sum += math.sqrt(
+        (a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]),
+      );
+    }
+    return sum;
+  }
+
+  /// Resolution order: CC-CEDICT dataset (lazy-loaded) -> curated preset
+  /// words -> empty (grid shows the 词库建设中 placeholder). Preset
+  /// pinyin fills gaps for cards without a reading.
+  List<WordCard> _resolveWordCards(
     CharacterEntry entry,
-    List<List<double>> medianPoints,
-    int order,
+    List<WordCard>? datasetWords,
   ) {
-    if (medianPoints.length < 2) {
-      return '第$order笔';
+    if (datasetWords != null && datasetWords.isNotEmpty) {
+      return <WordCard>[
+        for (final card in datasetWords)
+          WordCard(
+            word: card.word,
+            pinyin: card.pinyin ?? _presetWordPinyins[card.word],
+          ),
+      ];
     }
-
-    final points = medianPoints
-        .where((p) => p.length >= 2)
-        .map((p) => Offset(p[0], p[1]))
-        .toList(growable: false);
-    if (points.length < 2 || _polylineLength(points) <= 0) {
-      return '第$order笔';
-    }
-
-    // Asset medians use a y-up viewBox; convert to screen space (y-down)
-    // so all direction math matches what the user sees.
-    final screenPoints = entry.flipYAxis
-        ? <Offset>[
-            for (final p in points) Offset(p.dx, _viewBoxSize - p.dy),
-          ]
-        : points;
-
-    final segments =
-        _splitIntoRuns(screenPoints).where(_isSignificantSegment).toList();
-    if (segments.isEmpty) {
-      return '第$order笔';
-    }
-
-    final names = <String>[for (final s in segments) _segmentName(s)];
-    if (_totalLength(segments) < 100) {
-      return '点';
-    }
-    if (names.length == 1) {
-      return names.first;
-    }
-    return _combineSegments(names, segments, screenPoints);
-  }
-
-  static const double _viewBoxSize = 1024;
-
-  Offset _delta(Offset a, Offset b) => b - a;
-
-  double _polylineLength(List<Offset> points) {
-    var sum = 0.0;
-    for (var i = 0; i + 1 < points.length; i += 1) {
-      sum += _delta(points[i], points[i + 1]).distance;
-    }
-    return sum;
-  }
-
-  double _totalLength(List<List<Offset>> segments) {
-    var sum = 0.0;
-    for (final s in segments) {
-      sum += _polylineLength(s);
-    }
-    return sum;
-  }
-
-  /// Splits the polyline at direction changes larger than ~40 degrees,
-  /// merging tiny wobble into the surrounding run.
-  List<List<Offset>> _splitIntoRuns(List<Offset> points) {
-    final runs = <List<Offset>>[<Offset>[points.first]];
-
-    for (var i = 1; i < points.length - 1; i += 1) {
-      final prev = points[i - 1];
-      final cur = points[i];
-      final next = points[i + 1];
-      final turn = _angleBetween(prev, cur, next);
-      if (turn > 0.7 && _delta(prev, cur).distance > 24) {
-        runs.add(<Offset>[cur]);
-      } else {
-        runs.last.add(cur);
-      }
-    }
-    runs.last.add(points.last);
-    return runs;
-  }
-
-  double _angleBetween(Offset a, Offset b, Offset c) {
-    final u = _delta(a, b);
-    final v = _delta(b, c);
-    final lu = u.distance;
-    final lv = v.distance;
-    if (lu == 0 || lv == 0) {
-      return 0;
-    }
-    final cos = (u.dx * v.dx + u.dy * v.dy) / (lu * lv);
-    return math.acos(cos.clamp(-1.0, 1.0).toDouble());
-  }
-
-  bool _isSignificantSegment(List<Offset> segment) =>
-      _polylineLength(segment) > 30;
-
-  String _segmentName(List<Offset> segment) {
-    final start = segment.first;
-    final end = segment.last;
-    final dx = end.dx - start.dx;
-    final dy = end.dy - start.dy;
-    final absDx = dx.abs();
-    final absDy = dy.abs();
-
-    if (absDx > absDy * 2.2) {
-      return dx > 0 ? '横' : '提';
-    }
-    if (absDy > absDx * 2.2) {
-      return dy > 0 ? '竖' : '竖钩';
-    }
-    if (dy > 0) {
-      return dx > 0 ? '捺' : '撇';
-    }
-    return dx > 0 ? '提' : '平撇';
-  }
-
-  /// Maps the leading runs to standard compound stroke names. A trailing
-  /// flick that rises against the main downward flow marks a "钩".
-  String _combineSegments(
-    List<String> names,
-    List<List<Offset>> segments,
-    List<Offset> allPoints,
-  ) {
-    final first = names.first;
-    final second = names.length > 1 ? names[1] : '';
-    final hasHook = _endsWithUpwardFlick(allPoints);
-
-    if (first == '横') {
-      if (second == '竖') {
-        return hasHook ? '横折钩' : '横折';
-      }
-      if (second == '撇' || second == '平撇') {
-        return hasHook ? '横折钩' : '横撇';
-      }
-      if (second == '捺') {
-        return '横折';
-      }
-    }
-    if ((first == '竖') && (second == '横' || second == '提')) {
-      if (hasHook) {
-        return '竖弯钩';
-      }
-      return second == '提' ? '竖提' : '竖折';
-    }
-    if (first == '竖' && second == '竖钩') {
-      return '竖钩';
-    }
-    if (first == '撇' && (second == '横' || second == '提')) {
-      return '撇折';
-    }
-    if (first == '撇' && second == '点') {
-      return '撇点';
-    }
-    return first + second;
-  }
-
-  /// True when the stroke's final samples move noticeably upward against
-  /// the overall downward flow — the little hook at the end of 横折钩 /
-  /// 竖弯钩 style strokes.
-  bool _endsWithUpwardFlick(List<Offset> points) {
-    if (points.length < 3) {
-      return false;
-    }
-    var rise = 0.0;
-    for (var i = points.length - 3; i < points.length - 1; i += 1) {
-      rise += points[i].dy - points[i + 1].dy; // screen y decreasing = up
-    }
-    return rise < -18;
-  }
-
-  /// Curated real words win; otherwise there is nothing honest to show —
-  /// the data asset only carries English definitions, so fabricating
-  /// words/pinyin would repeat the old bug.
-  List<String>? _resolvePresetWords(CharacterEntry entry) {
     final preset = _presetWords[entry.char];
     if (preset == null || preset.isEmpty) {
-      return null;
+      return const <WordCard>[];
     }
-    return preset;
+    return <WordCard>[
+      for (final word in preset)
+        WordCard(word: word, pinyin: _presetWordPinyins[word]),
+    ];
   }
-
-  String? _wordPinyin(String word) => _presetWordPinyins[word];
 
   List<String> _resolveDefinitions(CharacterEntry entry) {
     return entry.examples
@@ -992,10 +905,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         .toList(growable: false);
   }
 
-  String _buildExplanation(CharacterEntry entry, List<String>? words) {
-    final wordText = words == null || words.isEmpty
+  String _buildExplanation(CharacterEntry entry, List<WordCard> words) {
+    final wordText = words.isEmpty
         ? ''
-        : words.take(4).join('、');
+        : words.take(4).map((card) => card.word).join('、');
     final pinyin = entry.pinyin.trim();
     return '「${entry.char}」读作${pinyin.isEmpty ? '（待补充）' : pinyin}。'
         '部首为${entry.radical}，共${entry.strokeCount}画。'
@@ -1040,9 +953,15 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     return map[radical] ?? '待补充';
   }
 
-  void _showEncyclopediaSheet(CharacterEntry entry) {
+  void _showEncyclopediaSheet(
+    CharacterEntry entry,
+    String? zhDefinition,
+  ) {
     final strokeNames = _resolveStrokeNames(entry);
-    final definitions = _resolveDefinitions(entry);
+    final definitions = <String>[
+      if (zhDefinition != null && zhDefinition.isNotEmpty) zhDefinition,
+      ..._resolveDefinitions(entry),
+    ];
 
     showModalBottomSheet<void>(
       context: context,

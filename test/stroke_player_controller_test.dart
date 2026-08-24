@@ -58,6 +58,59 @@ void main() {
     controller.dispose();
   });
 
+  test('shorter strokes finish in proportionally fewer ticks', () {
+    // Stroke 1 is a full-length sweep, stroke 2 a short dot.
+    final controller = StrokePlayerController(
+      totalStrokes: 2,
+      strokeWeights: const <double>[1.0, 0.3],
+    )..togglePlay();
+
+    var ticksOnFirstStroke = 0;
+    var ticksOnSecondStroke = 0;
+    for (var i = 0; i < 400; i += 1) {
+      if (controller.state.completed) {
+        break;
+      }
+      controller.advanceTick();
+      if (controller.state.currentStrokeIndex == 0) {
+        ticksOnFirstStroke += 1;
+      } else {
+        ticksOnSecondStroke += 1;
+      }
+    }
+
+    expect(controller.state.completed, true);
+    expect(ticksOnFirstStroke, greaterThan(0));
+    expect(ticksOnSecondStroke, greaterThan(0));
+    // Weight 0.3 means roughly a third of the duration; allow slack for
+    // tick quantization but the speedup must be clearly visible.
+    expect(
+      ticksOnSecondStroke,
+      lessThan(ticksOnFirstStroke * 0.7),
+      reason: 'dot strokes must animate faster than long sweeps',
+    );
+    controller.dispose();
+  });
+
+  test('missing weights keep uniform timing for every stroke', () {
+    final controller = StrokePlayerController(totalStrokes: 2)..togglePlay();
+
+    var first = 0;
+    var second = 0;
+    for (var i = 0; i < 400 && !controller.state.completed; i += 1) {
+      controller.advanceTick();
+      if (controller.state.currentStrokeIndex == 0) {
+        first += 1;
+      } else {
+        second += 1;
+      }
+    }
+
+    final ratio = first / second;
+    expect(ratio, inExclusiveRange(0.6, 1.6));
+    controller.dispose();
+  });
+
   test('playback completes and stays on the finished glyph', () {
     final controller = StrokePlayerController(totalStrokes: 2)..togglePlay();
 

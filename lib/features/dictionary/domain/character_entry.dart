@@ -10,6 +10,7 @@ class CharacterEntry {
     this.examples = const <String>[],
     this.synthetic = false,
     this.flipYAxis = false,
+    this.strokeNames = const <String>[],
   });
 
   final String char;
@@ -20,6 +21,12 @@ class CharacterEntry {
   final List<String> examples;
   final bool synthetic;
   final bool flipYAxis;
+
+  /// Authoritative per-stroke names (from the cnchar-order derived
+  /// dataset). Ambiguous pairs are slash-joined candidates, e.g.
+  /// "横撇/横钩"; empty means no data and the geometric classifier
+  /// should be used instead.
+  final List<String> strokeNames;
 
   factory CharacterEntry.fromJson(Map<String, dynamic> json) {
     final parsedStrokes = ((json['strokes'] as List<dynamic>?) ?? const <dynamic>[])
@@ -43,6 +50,9 @@ class CharacterEntry {
       flipYAxis: json.containsKey('flipYAxis')
           ? json['flipYAxis'] == true
           : hasMedianPoints,
+      strokeNames: ((json['strokeNames'] as List<dynamic>?) ?? const <dynamic>[])
+          .whereType<String>()
+          .toList(growable: false),
     );
   }
 
@@ -56,6 +66,7 @@ class CharacterEntry {
       'examples': examples,
       'synthetic': synthetic,
       'flipYAxis': flipYAxis,
+      if (strokeNames.isNotEmpty) 'strokeNames': strokeNames,
     };
   }
 
@@ -68,6 +79,7 @@ class CharacterEntry {
     List<String>? examples,
     bool? synthetic,
     bool? flipYAxis,
+    List<String>? strokeNames,
   }) {
     return CharacterEntry(
       char: char ?? this.char,
@@ -78,6 +90,7 @@ class CharacterEntry {
       examples: examples ?? this.examples,
       synthetic: synthetic ?? this.synthetic,
       flipYAxis: flipYAxis ?? this.flipYAxis,
+      strokeNames: strokeNames ?? this.strokeNames,
     );
   }
 }

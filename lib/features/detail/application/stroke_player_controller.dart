@@ -6,8 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'stroke_player_state.dart';
 
 class StrokePlayerController extends StateNotifier<StrokePlayerState> {
-  StrokePlayerController({required int totalStrokes})
-      : super(StrokePlayerState.initial(totalStrokes: totalStrokes)) {
+  StrokePlayerController({
+    required int totalStrokes,
+    List<double> strokeWeights = const <double>[],
+  }) : super(StrokePlayerState.initial(
+          totalStrokes: totalStrokes,
+          strokeWeights: strokeWeights,
+        )) {
     _ticker = Timer.periodic(_tickDuration, _onTick);
   }
 
@@ -133,7 +138,13 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
       return;
     }
 
-    final nextProgress = state.progress + _tickSeconds * state.speed;
+    // Longer strokes take longer: the tick increment is scaled by the
+    // stroke's relative length (weight 1 = longest stroke, smaller =
+    // faster), so a 点 sweeps by quickly while a long 横 keeps a natural
+    // pace. Missing weights fall back to uniform timing.
+    final weight = state.weightAt(state.currentStrokeIndex);
+    final nextProgress =
+        state.progress + _tickSeconds * state.speed / weight;
     if (nextProgress < 1) {
       state = state.copyWith(progress: nextProgress);
       return;
@@ -176,11 +187,13 @@ class StrokePlayerKey {
     required this.sessionId,
     required this.char,
     required this.totalStrokes,
+    this.strokeWeights = const <double>[],
   });
 
   final String sessionId;
   final String char;
   final int totalStrokes;
+  final List<double> strokeWeights;
 
   @override
   bool operator ==(Object other) {
@@ -189,9 +202,11 @@ class StrokePlayerKey {
             runtimeType == other.runtimeType &&
             sessionId == other.sessionId &&
             char == other.char &&
-            totalStrokes == other.totalStrokes;
+            totalStrokes == other.totalStrokes &&
+            listEquals(strokeWeights, other.strokeWeights);
   }
 
   @override
-  int get hashCode => Object.hash(sessionId, char, totalStrokes);
+  int get hashCode => Object.hash(sessionId, char, totalStrokes) ^
+      Object.hashAll(strokeWeights);
 }

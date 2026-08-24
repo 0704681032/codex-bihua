@@ -1,4 +1,31 @@
+import 'dart:js_interop';
+
 import 'package:web/web.dart' as web;
+
+/// Callback invoked when the user navigates browser history
+/// (back/forward). [char] is the detail char encoded in the resulting
+/// URL, or null when the URL points at the home page.
+typedef HistoryListener = void Function(String? char);
+
+HistoryListener? _listener;
+bool _registered = false;
+
+void setHistoryListener(HistoryListener? listener) {
+  _listener = listener;
+  if (_registered || listener == null) {
+    return;
+  }
+  _registered = true;
+  web.window.addEventListener(
+    'popstate',
+    ((web.PopStateEvent _) {
+      // The browser has already changed the URL; just report it. The
+      // Flutter side must not push another history entry while handling
+      // this navigation.
+      _listener?.call(readCharFromUrl());
+    }).toJS,
+  );
+}
 
 String? readCharFromUrl() {
   final uri = Uri.tryParse(web.window.location.href);
@@ -39,17 +66,24 @@ String? _nonEmpty(String? value) {
 }
 
 void syncDetailUrl(String char) {
-  _replaceUrl('#/char/${Uri.encodeComponent(char)}');
+  _pushUrl('#/char/${Uri.encodeComponent(char)}');
 }
 
 void syncHomeUrl() {
-  _replaceUrl('#/');
+  _pushUrl('#/');
 }
 
-/// Rewrites only the URL. The Flutter web engine stores its own bookkeeping
-/// in history.state (a "serial count"); passing null would trip its
-/// "unexpected null history state" assertion, so the existing state object
-/// is carried over untouched.
-void _replaceUrl(String url) {
-  web.window.history.replaceState(web.window.history.state, '', url);
+/// Pushes a history entry so the browser back button stays inside the
+/// app instead of leaving it (the old replaceState approach kept only a
+/// single entry). Skips when the URL already matches — popstate-driven
+/// rebuilds land here with the target already in place, and pushing
+/// again would duplicate entries and break further back navigation.
+void _pushUrl(String url) {
+  if (web.window.location.hash == url) {
+    return;
+  }
+  // The Flutter web engine keeps bookkeeping in history.state (a
+  // "serial count"); carry the current object over so its internal
+  // assertions stay happy.
+  web.window.history.pushState(web.window.history.state, '', url);
 }

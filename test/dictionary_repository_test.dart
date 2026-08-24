@@ -1,4 +1,3 @@
-
 import 'package:bihua/features/dictionary/data/asset_dictionary_repository.dart';
 import 'package:bihua/features/dictionary/domain/filter_criteria.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +8,16 @@ void main() {
 
   group('AssetDictionaryRepository', () {
     final bundle = _FakeAssetBundle(<String, String>{
-      'assets/data/chars_3500.json': '''
+      'assets/data/chars_index.json': '''
+{
+  "shardSize": 2,
+  "chars": [
+    {"c": "笔", "p": "bi3", "r": "竹", "n": 2, "s": 0},
+    {"c": "顺", "p": "shun4", "r": "页", "n": 1, "s": 0}
+  ]
+}
+''',
+      'assets/data/shards/shard_000.json': '''
 [
   {
     "char": "笔",
@@ -42,13 +50,17 @@ void main() {
       minDictionarySize: 12,
     );
 
-    test('loads entries and can query by char', () async {
+    test('index loads fast; getByChar hydrates the shard on demand', () async {
       await repo.warmUp();
+      // The index alone must already know the char.
+      final results = await repo.searchByChars(['笔']);
+      expect(results, hasLength(1));
+
       final item = await repo.getByChar('笔');
       expect(item, isNotNull);
       expect(item!.pinyin, 'bi3');
-      // The rendered stroke list is authoritative: entries are normalized to
-      // sequential orders and the count follows the actual strokes.
+      // The rendered stroke list is authoritative: entries are normalized
+      // to sequential orders and the count follows the actual strokes.
       expect(item.strokeCount, 2);
       expect(
         item.strokes.map((s) => s.order),
@@ -58,10 +70,19 @@ void main() {
       expect(item.strokes.first.svgPath, 'M120 200 L900 200');
     });
 
+    test('hydrating one shard also serves its neighbours', () async {
+      await repo.getByChar('笔');
+      // Same shard → served from cache without another asset fetch.
+      final cached = await repo.getByChar('顺');
+      expect(cached, isNotNull);
+      expect(cached!.strokeCount, 1);
+    });
+
     test('inflates dictionary to minimum size', () async {
       await repo.warmUp();
       final synthetic = await repo.getByChar('一');
       expect(synthetic, isNotNull);
+      expect(synthetic!.synthetic, isTrue);
     });
 
     test('filters by pinyin/radical/stroke count', () async {

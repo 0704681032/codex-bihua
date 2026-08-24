@@ -7,25 +7,66 @@ import '../domain/dictionary_repository.dart';
 import '../domain/filter_criteria.dart';
 import '../domain/stroke_path.dart';
 
+/// Metadata kept in memory for every char after loading the light index.
+class _CharMeta {
+  const _CharMeta({
+    required this.char,
+    required this.pinyin,
+    required this.radical,
+    required this.strokeCount,
+    required this.shard,
+  });
+
+  final String char;
+  final String pinyin;
+  final String radical;
+  final int strokeCount;
+  final int shard;
+
+  CharacterEntry toLightEntry() {
+    return CharacterEntry(
+      char: char,
+      pinyin: pinyin,
+      radical: radical,
+      strokeCount: strokeCount,
+      // Grid cards and filter lists only render text; full strokes are
+      // hydrated on demand when the detail page asks for the char.
+      strokes: const <StrokePath>[],
+    );
+  }
+}
+
+/// Dictionary repository backed by split assets:
+///
+///  * `chars_index.json` (~435 KB) — metadata for all chars, loaded once
+///    at startup so the home page paints immediately.
+///  * `shards/shard_NNN.json` — full stroke payloads, fetched only when a
+///    detail page actually needs them (one shard ≈ 256 chars) and cached
+///    in memory afterwards.
 class AssetDictionaryRepository implements DictionaryRepository {
   AssetDictionaryRepository({
     AssetBundle? bundle,
-    String charsAssetPath = 'assets/data/chars_3500.json',
+    String indexAssetPath = 'assets/data/chars_index.json',
+    String shardAssetBase = 'assets/data/shards',
     String radicalsAssetPath = 'assets/data/radicals.json',
     int minDictionarySize = 0,
   })  : _bundle = bundle ?? rootBundle,
-        _charsAssetPath = charsAssetPath,
+        _indexAssetPath = indexAssetPath,
+        _shardAssetBase = shardAssetBase,
         _radicalsAssetPath = radicalsAssetPath,
         _minDictionarySize = minDictionarySize;
 
   final AssetBundle _bundle;
-  final String _charsAssetPath;
+  final String _indexAssetPath;
+  final String _shardAssetBase;
   final String _radicalsAssetPath;
   final int _minDictionarySize;
 
   bool _loaded = false;
 
-  final Map<String, CharacterEntry> _byChar = <String, CharacterEntry>{};
+  final Map<String, _CharMeta> _metaByChar = <String, _CharMeta>{};
+  final Map<String, CharacterEntry> _hydrated = <String, CharacterEntry>{};
+  final Set<int> _loadedShards = <int>{};
   final Map<String, List<String>> _byPinyin = <String, List<String>>{};
   final Map<String, List<String>> _byRadical = <String, List<String>>{};
   final Map<int, List<String>> _byStrokeCount = <int, List<String>>{};
@@ -40,7 +81,19 @@ class AssetDictionaryRepository implements DictionaryRepository {
   @override
   Future<CharacterEntry?> getByChar(String char) async {
     await _ensureLoaded();
-    return _byChar[char];
+
+    final existing = _hydrated[char];
+    if (existing != null && existing.strokes.isNotEmpty) {
+      return existing;
+    }
+
+    final meta = _metaByChar[char];
+    if (meta == null) {
+      return null;
+    }
+
+    await _loadShard(meta.shard);
+    return _hydrated[char] ?? meta.toLightEntry();
   }
 
   @override
@@ -53,9 +106,14 @@ class AssetDictionaryRepository implements DictionaryRepository {
       if (!seen.add(char)) {
         continue;
       }
-      final item = _byChar[char];
-      if (item != null) {
-        result.add(item);
+      final hydratedItem = _hydrated[char];
+      if (hydratedItem != null && hydratedItem.strokes.isNotEmpty) {
+        result.add(hydratedItem);
+        continue;
+      }
+      final meta = _metaByChar[char];
+      if (meta != null) {
+        result.add(meta.toLightEntry());
       }
     }
 
@@ -92,19 +150,7 @@ class AssetDictionaryRepository implements DictionaryRepository {
       return <CharacterEntry>[];
     }
 
-    final result = candidates
-        .map((char) => _byChar[char])
-        .whereType<CharacterEntry>()
-        .toList(growable: false)
-      ..sort((a, b) {
-        final strokeDiff = a.strokeCount.compareTo(b.strokeCount);
-        if (strokeDiff != 0) {
-          return strokeDiff;
-        }
-        return a.char.compareTo(b.char);
-      });
-
-    return result;
+    return _resolveEntries(candidates);
   }
 
   @override
@@ -139,163 +185,200 @@ class AssetDictionaryRepository implements DictionaryRepository {
     return _pickChars(preferred, limit: limit);
   }
 
-  List<CharacterEntry> _pickChars(List<String> preferred, {required int limit}) {
-    final result = <CharacterEntry>[];
-    final seen = <String>{};
-
-    for (final char in preferred) {
-      final item = _byChar[char];
-      if (item != null && seen.add(char)) {
-        result.add(item);
-      }
-      if (result.length >= limit) {
-        return result;
-      }
-    }
-
-    for (final entry in _byChar.values) {
-      if (seen.add(entry.char)) {
-        result.add(entry);
-      }
-      if (result.length >= limit) {
-        break;
-      }
-    }
-
-    return result;
-  }
+  // ---- loading ----
 
   Future<void> _ensureLoaded() async {
     if (_loaded) {
       return;
     }
 
-    final entries = await _loadEntries();
-    final radicals = await _loadRadicals();
+    final rawIndex = await _bundle.loadString(_indexAssetPath);
+    _parseIndex(rawIndex);
 
-    _inflateToMinDictionary(entries, radicals);
-    _buildIndexes(entries, radicals);
+    final radicals = await _loadRadicals();
+    _inflateToMinDictionary(radicals);
+    _buildIndexes(radicals);
     _loaded = true;
   }
 
-  Future<List<CharacterEntry>> _loadEntries() async {
-    final raw = await _bundle.loadString(_charsAssetPath);
+  void _parseIndex(String raw) {
     final decoded = jsonDecode(raw);
-    if (decoded is! List<dynamic>) {
-      throw const FormatException('chars_3500.json 必须是数组');
+    if (decoded is! Map<dynamic, dynamic>) {
+      throw const FormatException('chars_index.json 必须是对象');
+    }
+    final chars = decoded['chars'];
+    if (chars is! List<dynamic>) {
+      throw const FormatException('chars_index.json 缺少 chars 数组');
     }
 
-    final entries = <CharacterEntry>[];
-
-    for (final item in decoded) {
+    for (final item in chars) {
       if (item is! Map<dynamic, dynamic>) {
         continue;
       }
-      final map = Map<String, dynamic>.from(item);
-      final parsed = CharacterEntry.fromJson(map);
-      if (parsed.char.runes.length != 1) {
+      final char = (item['c'] as String?)?.trim() ?? '';
+      if (char.runes.length != 1) {
         continue;
       }
-
-      // Stroke order must follow the stored `order` field; drop entries
-      // without a drawable path and normalize the sequence to 1..n.
-      final orderedStrokes = parsed.strokes
-          .where((stroke) => stroke.svgPath.trim().isNotEmpty)
-          .toList()
-        ..sort((a, b) => a.order.compareTo(b.order));
-      final normalizedStrokes = <StrokePath>[
-        for (var i = 0; i < orderedStrokes.length; i += 1)
-          StrokePath(
-            order: i + 1,
-            svgPath: orderedStrokes[i].svgPath,
-            medianPoints: orderedStrokes[i].medianPoints,
-          ),
-      ];
-
-      // The rendered stroke list is the source of truth for the count.
-      final strokeCount = normalizedStrokes.isNotEmpty
-          ? normalizedStrokes.length
-          : (parsed.strokeCount > 0 ? parsed.strokeCount : 6);
-
-      final strokes = normalizedStrokes.isNotEmpty
-          ? normalizedStrokes
-          : _generateSyntheticStrokes(strokeCount, parsed.char.runes.first);
-
-      entries.add(
-        parsed.copyWith(
-          strokeCount: strokeCount,
-          strokes: strokes,
-          pinyin: parsed.pinyin.isEmpty ? 'zi4' : parsed.pinyin,
-          radical: parsed.radical.isEmpty ? '一' : parsed.radical,
-        ),
+      final meta = _CharMeta(
+        char: char,
+        pinyin: (item['p'] as String?)?.trim() ?? '',
+        radical: (item['r'] as String?)?.trim() ?? '',
+        strokeCount: (item['n'] as num?)?.toInt() ?? 0,
+        shard: (item['s'] as num?)?.toInt() ?? 0,
       );
+      _metaByChar[char] = meta;
+    }
+  }
+
+  Future<void> _loadShard(int shard) async {
+    if (!_loadedShards.add(shard)) {
+      return;
+    }
+    final path = '$_shardAssetBase/shard_${shard.toString().padLeft(3, '0')}.json';
+    try {
+      final raw = await _bundle.loadString(path);
+      final decoded = jsonDecode(raw);
+      if (decoded is! List<dynamic>) {
+        return;
+      }
+      for (final item in decoded) {
+        if (item is! Map<dynamic, dynamic>) {
+          continue;
+        }
+        final entry = _entryFromJson(Map<String, dynamic>.from(item));
+        if (entry != null) {
+          _hydrated[entry.char] = entry;
+        }
+      }
+    } on Exception {
+      // A missing or corrupt shard must not crash lookups; callers fall
+      // back to the light metadata entry.
+      _loadedShards.remove(shard);
+    }
+  }
+
+  CharacterEntry? _entryFromJson(Map<String, dynamic> json) {
+    final parsed = CharacterEntry.fromJson(json);
+    if (parsed.char.runes.length != 1) {
+      return null;
     }
 
-    return entries;
+    // Stroke order must follow the stored `order` field; drop entries
+    // without a drawable path and normalize the sequence to 1..n.
+    final orderedStrokes = parsed.strokes
+        .where((stroke) => stroke.svgPath.trim().isNotEmpty)
+        .toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+    final normalizedStrokes = <StrokePath>[
+      for (var i = 0; i < orderedStrokes.length; i += 1)
+        StrokePath(
+          order: i + 1,
+          svgPath: orderedStrokes[i].svgPath,
+          medianPoints: orderedStrokes[i].medianPoints,
+        ),
+    ];
+
+    // The rendered stroke list is the source of truth for the count.
+    final strokeCount = normalizedStrokes.isNotEmpty
+        ? normalizedStrokes.length
+        : (parsed.strokeCount > 0 ? parsed.strokeCount : 6);
+
+    var strokes = normalizedStrokes;
+    if (strokes.isEmpty) {
+      strokes = _generateSyntheticStrokes(strokeCount, parsed.char.runes.first);
+    }
+
+    // Names must line up with the normalized stroke list or they would
+    // label the wrong stroke.
+    final strokeNames = parsed.strokeNames.length == strokes.length
+        ? parsed.strokeNames
+        : const <String>[];
+
+    return parsed.copyWith(
+      strokeCount: strokeCount,
+      strokes: strokes,
+      pinyin: parsed.pinyin.isEmpty ? 'zi4' : parsed.pinyin,
+      radical: parsed.radical.isEmpty ? '一' : parsed.radical,
+      strokeNames: strokeNames,
+      flipYAxis: strokes.any((stroke) => stroke.medianPoints.isNotEmpty),
+    );
   }
 
   Future<List<String>> _loadRadicals() async {
-    final raw = await _bundle.loadString(_radicalsAssetPath);
-    final decoded = jsonDecode(raw);
-    if (decoded is! List<dynamic>) {
+    try {
+      final raw = await _bundle.loadString(_radicalsAssetPath);
+      final decoded = jsonDecode(raw);
+      if (decoded is! List<dynamic>) {
+        return _defaultRadicals;
+      }
+
+      final radicals = decoded
+          .whereType<String>()
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
+
+      if (radicals.isEmpty) {
+        return _defaultRadicals;
+      }
+
+      return radicals;
+    } on Exception {
       return _defaultRadicals;
     }
-
-    final radicals = decoded
-        .whereType<String>()
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toList(growable: false);
-
-    if (radicals.isEmpty) {
-      return _defaultRadicals;
-    }
-
-    return radicals;
   }
 
-  void _inflateToMinDictionary(List<CharacterEntry> entries, List<String> radicals) {
-    if (entries.length >= _minDictionarySize) {
+  void _inflateToMinDictionary(List<String> radicals) {
+    if (_metaByChar.length >= _minDictionarySize) {
       return;
     }
 
-    final existingChars = entries.map((item) => item.char).toSet();
     final radicalPool = radicals.isNotEmpty ? radicals : _defaultRadicals;
 
     var code = 0x4E00;
-    while (entries.length < _minDictionarySize && code <= 0x9FFF) {
+    while (_metaByChar.length < _minDictionarySize && code <= 0x9FFF) {
       final char = String.fromCharCode(code);
-      if (existingChars.add(char)) {
+      if (!_metaByChar.containsKey(char)) {
         final strokeCount = 3 + (code % 12);
         final radical = radicalPool[code % radicalPool.length];
-        entries.add(
-          CharacterEntry(
-            char: char,
-            pinyin: 'zi${(code % 4) + 1}',
-            radical: radical,
-            strokeCount: strokeCount,
-            strokes: _generateSyntheticStrokes(strokeCount, code),
-            examples: <String>['$char字', '$char形'],
-            synthetic: true,
-          ),
+        _metaByChar[char] = _CharMeta(
+          char: char,
+          pinyin: 'zi${(code % 4) + 1}',
+          radical: radical,
+          strokeCount: strokeCount,
+          shard: -1,
+        );
+        _hydrated[char] = CharacterEntry(
+          char: char,
+          pinyin: 'zi${(code % 4) + 1}',
+          radical: radical,
+          strokeCount: strokeCount,
+          strokes: _generateSyntheticStrokes(strokeCount, code),
+          examples: <String>['$char字', '$char形'],
+          synthetic: true,
         );
       }
       code += 1;
     }
   }
 
-  void _buildIndexes(List<CharacterEntry> entries, List<String> radicals) {
-    _byChar.clear();
+  void _buildIndexes(List<String> radicals) {
     _byPinyin.clear();
     _byRadical.clear();
     _byStrokeCount.clear();
 
-    for (final entry in entries) {
-      _byChar[entry.char] = entry;
+    void indexMeta(_CharMeta meta) {
+      _byPinyin.putIfAbsent(meta.pinyin, () => <String>[]).add(meta.char);
+      _byRadical.putIfAbsent(meta.radical, () => <String>[]).add(meta.char);
+      _byStrokeCount
+          .putIfAbsent(meta.strokeCount, () => <String>[])
+          .add(meta.char);
+    }
 
-      _byPinyin.putIfAbsent(entry.pinyin, () => <String>[]).add(entry.char);
-      _byRadical.putIfAbsent(entry.radical, () => <String>[]).add(entry.char);
-      _byStrokeCount.putIfAbsent(entry.strokeCount, () => <String>[]).add(entry.char);
+    for (final meta in _metaByChar.values) {
+      // Synthetic (inflated) entries also get a meta row with shard -1,
+      // so one pass over the table covers every indexed char.
+      indexMeta(meta);
     }
 
     for (final list in _byPinyin.values) {
@@ -310,6 +393,60 @@ class AssetDictionaryRepository implements DictionaryRepository {
 
     final allRadicals = <String>{...radicals, ..._byRadical.keys};
     _knownRadicals = allRadicals.toList(growable: false)..sort();
+  }
+
+  List<CharacterEntry> _resolveEntries(Set<String> chars) {
+    final result = <CharacterEntry>[];
+    for (final char in chars) {
+      final hydratedItem = _hydrated[char];
+      if (hydratedItem != null && hydratedItem.strokes.isNotEmpty) {
+        result.add(hydratedItem);
+        continue;
+      }
+      final meta = _metaByChar[char];
+      if (meta != null) {
+        result.add(meta.toLightEntry());
+      } else {
+        final synthetic = _hydrated[char];
+        if (synthetic != null) {
+          result.add(synthetic);
+        }
+      }
+    }
+    result.sort((a, b) {
+      final strokeDiff = a.strokeCount.compareTo(b.strokeCount);
+      if (strokeDiff != 0) {
+        return strokeDiff;
+      }
+      return a.char.compareTo(b.char);
+    });
+    return result;
+  }
+
+  List<CharacterEntry> _pickChars(List<String> preferred, {required int limit}) {
+    final result = <CharacterEntry>[];
+    final seen = <String>{};
+
+    for (final char in preferred) {
+      final item = _hydrated[char] ?? _metaByChar[char]?.toLightEntry();
+      if (item != null && seen.add(char)) {
+        result.add(item);
+      }
+      if (result.length >= limit) {
+        return result;
+      }
+    }
+
+    for (final meta in _metaByChar.values) {
+      if (seen.add(meta.char)) {
+        result.add(meta.toLightEntry());
+      }
+      if (result.length >= limit) {
+        break;
+      }
+    }
+
+    return result;
   }
 
   List<StrokePath> _generateSyntheticStrokes(int strokeCount, int seed) {

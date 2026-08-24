@@ -49,6 +49,15 @@ class AppRouter {
   static bool _isDetailRoute(String name) =>
       name == detail || name.startsWith('$detail/');
 
+  /// Public counterpart of [_charFromRouteName]: derives the detail char
+  /// from a route name (null for non-detail routes).
+  static String? charFromRoute(String? name) {
+    if (name == null || !_isDetailRoute(name)) {
+      return null;
+    }
+    return _charFromRouteName(name);
+  }
+
   /// Accepts `/detail/%E4%B8%87` and `/detail?char=万`.
   static String? _charFromRouteName(String name) {
     if (name.startsWith('$detail/')) {

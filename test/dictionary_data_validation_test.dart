@@ -1,6 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Guards the offline dictionary against stroke-order regressions.
@@ -11,15 +11,24 @@ import 'package:flutter_test/flutter_test.dart';
 ///   * `strokeCount` equals the number of strokes,
 ///   * stroke `order` values form a strict 1..n sequence,
 ///   * every stroke has a non-empty SVG path and a median with >= 2 points,
-///   * all coordinates stay inside the padded viewBox.
+///   * all coordinates stay inside the padded viewBox,
+///   * merged `strokeNames` (when present) line up with the stroke list.
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
+  late final List<Map<dynamic, dynamic>> entries;
 
-  late final List<dynamic> entries;
-
-  setUpAll(() async {
-    final raw = await rootBundle.loadString('assets/data/chars_3500.json');
-    entries = jsonDecode(raw) as List<dynamic>;
+  setUpAll(() {
+    final shardDir = Directory('assets/data/shards');
+    final files = shardDir
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.json'))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    entries = <Map<dynamic, dynamic>>[
+      for (final file in files)
+        ...(jsonDecode(file.readAsStringSync()) as List<dynamic>)
+            .cast<Map<dynamic, dynamic>>(),
+    ];
   });
 
   test('dictionary contains a large character set', () {
@@ -29,8 +38,7 @@ void main() {
   test('every entry has consistent, ordered, animatable strokes', () {
     var checked = 0;
 
-    for (final item in entries) {
-      final entry = item as Map<dynamic, dynamic>;
+    for (final entry in entries) {
       final char = entry['char'] as String;
       final strokes = entry['strokes'] as List<dynamic>;
       final declaredCount = entry['strokeCount'] as num;
@@ -80,11 +88,34 @@ void main() {
     expect(checked, entries.length);
   });
 
+  test('merged stroke names line up with the stroke list', () {
+    var withNames = 0;
+    for (final entry in entries) {
+      final names = entry['strokeNames'] as List<dynamic>?;
+      if (names == null) {
+        continue;
+      }
+      final char = entry['char'] as String;
+      final strokes = entry['strokes'] as List<dynamic>;
+      expect(names.length, strokes.length,
+          reason: '$char strokeNames must match its stroke count');
+      for (final name in names) {
+        expect(name, isA<String>());
+        expect((name as String).isNotEmpty, isTrue,
+            reason: '$char has an empty stroke name');
+      }
+      withNames += 1;
+    }
+    // The cnchar-order derived dataset should cover most of the dict.
+    expect(withNames, greaterThan(6000),
+        reason: 'unexpectedly few chars carry authoritative stroke names');
+  });
+
   test('medians follow the flipped y-up writing convention', () {
     // 十 writes horizontal first, then the vertical top-to-bottom. In the
     // source's y-up space that means the vertical median starts at a larger
     // y than it ends at; the renderer flips Y before painting.
-    final shi = entries.firstWhere((e) => (e as Map)['char'] == '十') as Map;
+    final shi = entries.firstWhere((e) => e['char'] == '十');
     final vertical = (shi['strokes'] as List)[1]['medianPoints'] as List;
     final startY = (vertical.first[1] as num).toDouble();
     final endY = (vertical.last[1] as num).toDouble();
