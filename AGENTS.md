@@ -24,6 +24,20 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
 /e/flutter/bin/flutter.bat pub get
 ```
 
+### Mac 端到端测试 / Android 打包备注（2026-08-24 踩坑记录）
+
+- **Web E2E 需要 chromedriver 且大版本必须与 Chrome 一致**（本机 Chrome 151，brew 装的 152 会 `SessionNotCreatedException`）。匹配版已下载到：
+  `/var/folders/5w/thhptkk90tn_xflxyg_nhqgm0000gn/T/opencode/cft151/chromedriver-mac-arm64/chromedriver`
+  运行前先起服务：`chromedriver --port=4444 &`，再：
+  `flutter drive -d chrome --headless --driver=test_driver/integration_test.dart --target=integration_test/e2e_test.dart`
+  并设置 `NO_PROXY=127.0.0.1,localhost`（本机代理 127.0.0.1:7897 会劫持 localhost 导致 502）。
+- **Android 打包必须给 Gradle 注入代理**（Gradle JVM 不读 HTTP_PROXY 环境变量，直连 maven central 被 403）：
+  ```bash
+  export GRADLE_OPTS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7897 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7897"
+  flutter build apk --release [--split-per-abi]
+  ```
+- 本机无 AVD 镜像，`flutter emulators` 为空；Android 真机集成测试（app_flow_test.dart）待有设备再跑。
+
 ## Windows 已知限制
 
 - 未装 Visual Studio C++ 工具链 → 不能构建 Windows 桌面应用
@@ -31,6 +45,12 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
 - Web（Chrome/Edge）可用 ✅
 
 ## 明日待办（2026-08-24 已完成 ✅）
+
+- [x] 端到端测试补齐并全绿：integration_test/e2e_test.dart 8 个用例（深链冷启动/首页渲染/搜索全量数据/播放状态机/速度切换/TTS/词卡/浏览器返回前进联动），`flutter drive -d chrome --headless` 全过
+- [x] 修复 setSpeed 钳制上限 3.0 与「快速」预设 3.2 冲突（快速永远无法选中的 bug）
+- [x] 修复 Web 引擎分段推送裸 `/detail`、`/` 路由时落到错误页的问题（现统一落首页，深链详情页点返回不再见到"详情页参数缺失"）
+- [x] 统一深链 URL 格式为 `#/detail/<字>`（与引擎写法一致；旧 `#/char/<字>` 链接仍兼容）
+- [x] Android 打包打通：app-release.apk 64.8MB + 按 ABI 拆分（arm64 32.9MB / armeabi-v7a 30.4MB / x86_64 34.3MB）
 
 - [x] Mac（公司）Flutter 路径补充到上表：`/opt/homebrew/share/flutter/bin/flutter`（已在 PATH）
 - [x] 动画节奏：按笔画长度归一化时长 —— `StrokePlayerKey.strokeWeights` + 控制器按权重推进，权重由中轴线长度归一化（0.3~1.0）

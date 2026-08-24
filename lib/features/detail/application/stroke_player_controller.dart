@@ -113,7 +113,9 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
   }
 
   void setSpeed(double speed) {
-    final normalized = speed.clamp(0.3, 3.0).toDouble();
+    // Upper bound matches the 快速 chip preset (3.2) so the advertised
+    // speed is actually reachable and the chip can show as selected.
+    final normalized = speed.clamp(0.3, 3.2).toDouble();
     state = state.copyWith(speed: normalized);
   }
 

@@ -26,17 +26,23 @@ class AppRouter {
       final args = settings.arguments;
       final fromArgs = args is DetailRouteArgs && args.char.trim().isNotEmpty;
       final char = fromArgs ? args.char.trim() : _charFromRouteName(name);
-      if (char != null) {
+      if (char != null && char.isNotEmpty) {
         return MaterialPageRoute<void>(
           builder: (_) => DetailPage(char: char),
           settings: settings,
         );
       }
-      return _errorRoute('详情页参数缺失');
+      // Web 引擎冷启动会按 URL 分段推送中间路由(如裸 "/detail"), 这类
+      // 无字路由落回首页而不是错误页, 保证返回键链路始终可达首页。
+      return MaterialPageRoute<void>(
+        builder: (_) => const HomePage(),
+        settings: settings,
+      );
     }
 
     switch (name) {
       case home:
+      case '/':
         return MaterialPageRoute<void>(
           builder: (_) => const HomePage(),
           settings: settings,

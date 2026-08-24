@@ -66,7 +66,9 @@ String? _nonEmpty(String? value) {
 }
 
 void syncDetailUrl(String char) {
-  _pushUrl('#/char/${Uri.encodeComponent(char)}');
+  // 与 Web 引擎的写法保持一致(路由名即 hash 路径)。两种格式并存会让
+  // 引擎簿记错乱并触发 popstate 风暴, 把刚推入的页面盖掉。
+  _pushUrl('#/detail/${Uri.encodeComponent(char)}');
 }
 
 void syncHomeUrl() {

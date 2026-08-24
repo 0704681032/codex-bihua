@@ -16,3 +16,6 @@ build/
 .tmp-mmh/
 tools/cache/
 package/
+
+# Flutter crash reports
+flutter_*.log

@@ -26,12 +26,18 @@ class DetailPage extends ConsumerStatefulWidget {
 
   final String char;
 
+  /// 测试观测点:最近一次构建的播放器 provider,供集成测试读取
+  /// 真实状态机(避免复现随机 sessionId)。
+  @visibleForTesting
+  static AutoDisposeStateNotifierProvider<StrokePlayerController,
+          StrokePlayerState>? lastPlayerProvider;
+
   @override
   ConsumerState<DetailPage> createState() => _DetailPageState();
 }
 
 class _DetailPageState extends ConsumerState<DetailPage> {
-  static const double _autoPlaySpeed = 2.4;
+  static const double _autoPlaySpeed = 1.6;
   static const Map<String, List<String>> _presetWords = <String, List<String>>{
     '母': <String>['母亲', '字母', '母子', '母体', '母猪', '酵母'],
     '笔': <String>['毛笔', '画笔', '笔顺', '笔记', '笔画', '执笔'],
@@ -130,10 +136,11 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         await tts.setPitch(1.0);
       } catch (_) {}
 
+      // Web 端连续点击时会因打断上一段合成而触发浏览器级 error
+      // (interrupted/canceled),此时新语音往往已在正常播放——把失败
+      // 提示收敛为仅记录日志,避免误导用户。
       tts.setErrorHandler((message) {
-        if (mounted && message.isNotEmpty) {
-          _showSnack('语音播放失败，请稍后重试');
-        }
+        debugPrint('TTS error: $message');
       });
 
       if (!mounted) {
@@ -218,7 +225,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     // still "playing" right after stop(); give cancel a beat to settle.
     try {
       await _tts!.stop();
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
     } catch (_) {}
 
     try {
@@ -226,15 +233,15 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       // definitive non-1 value (never null) counts as failure.
       final result = await _tts!.speak(trimmed);
       if (result != null && result != 1) {
-        _showSnack('语音播放失败，请稍后重试');
+        debugPrint('TTS speak returned $result');
       }
     } on MissingPluginException {
       if (mounted) {
         setState(() => _ttsAvailable = false);
       }
       _showSnack('当前设备暂不支持语音播放');
-    } catch (_) {
-      _showSnack('语音播放失败，请稍后重试');
+    } catch (error) {
+      debugPrint('TTS speak failed: $error');
     }
   }
 
@@ -277,6 +284,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             strokeWeights: _strokeWeights(entry),
           );
           final provider = strokePlayerProvider(key);
+          DetailPage.lastPlayerProvider = provider;
           final playerState = ref.watch(provider);
           final player = ref.read(provider.notifier);
           final autoPlayKey =
