@@ -31,7 +31,7 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
   运行前先起服务：`chromedriver --port=4444 &`，再：
   `flutter drive -d chrome --headless --driver=test_driver/integration_test.dart --target=integration_test/e2e_test.dart`
   并设置 `NO_PROXY=127.0.0.1,localhost`（本机代理 127.0.0.1:7897 会劫持 localhost 导致 502）。
-- **Android 打包必须给 Gradle 注入代理**（Gradle JVM 不读 HTTP_PROXY 环境变量，直连 maven central 被 403）：
+- **Android 打包必须给 Gradle 注入代理**（Gradle JVM 不读 HTTP_PROXY 环境变量，直连 maven central 被 403），完整流程见 `docs/Android打包指南.md`：
   ```bash
   export GRADLE_OPTS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7897 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7897"
   flutter build apk --release [--split-per-abi]

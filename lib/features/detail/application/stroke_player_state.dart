@@ -28,10 +28,11 @@ class StrokePlayerState {
   final double progress;
   final int totalStrokes;
 
-  /// Per-stroke duration factors normalized to the longest stroke
-  /// (longest = 1.0). A 点 with weight 0.3 therefore animates roughly
-  /// three times faster than a full-length 横. An empty list means every
-  /// stroke plays with the same duration.
+  /// Per-stroke duration factors anchored to the *average* stroke
+  /// (mean = 1.0): typical strokes keep the uniform-timing pace, a 点
+  /// with weight 0.4 animates visibly faster and a long 横 at 1.6 a
+  /// little slower. An empty list means every stroke plays with the
+  /// same duration.
   final List<double> strokeWeights;
 
   bool get completed => currentStrokeIndex >= totalStrokes;

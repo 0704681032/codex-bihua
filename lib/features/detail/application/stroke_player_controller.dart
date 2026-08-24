@@ -14,6 +14,9 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
           strokeWeights: strokeWeights,
         )) {
     _ticker = Timer.periodic(_tickDuration, _onTick);
+    // A fresh Stopwatch measures nothing until started; without this the
+    // wall clock reads 0 forever and playback never advances.
+    _wallClock.start();
   }
 
   late final Timer _ticker;
@@ -22,6 +25,18 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
   // Matches _tickDuration; a const Duration property can't be used in
   // another const initializer.
   static const double _tickSeconds = 0.016;
+
+  // Wall clock between ticks. Advancing by measured time instead of a
+  // fixed step keeps the pace stable when the event loop stalls or
+  // Chrome throttles timers and then delivers queued ticks back to
+  // back — fixed steps would replay every missed tick at full speed,
+  // making the animation suddenly lurch forward.
+  final Stopwatch _wallClock = Stopwatch();
+
+  // Upper bound for one tick's delta. Without it, returning from a
+  // backgrounded tab (timers throttled to ~1/s) would jump the drawing
+  // ahead by seconds in a single frame.
+  static const double _maxTickSeconds = 0.1;
 
   void setTotalStrokes(int total) {
     final safe = total < 0 ? 0 : total;
@@ -113,24 +128,38 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
   }
 
   void setSpeed(double speed) {
-    // Upper bound matches the 快速 chip preset (3.2) so the advertised
-    // speed is actually reachable and the chip can show as selected.
+    // Upper bound stays above the 快速 chip preset (2.0) so the
+    // advertised speed is actually reachable and the chip shows selected.
     final normalized = speed.clamp(0.3, 3.2).toDouble();
     state = state.copyWith(speed: normalized);
   }
 
   void _onTick(Timer timer) {
-    _advance();
+    final elapsed = _wallClock.elapsedMilliseconds;
+    _wallClock.reset();
+    // Reset even while paused so resuming never replays the pause as a
+    // giant first delta.
+    if (!state.isPlaying || elapsed <= 0) {
+      return;
+    }
+    _advance(elapsed / 1000);
   }
 
-  /// Advances the animation by one tick. Exposed for tests so the
-  /// stroke-advance behavior can be verified without real timers.
+  /// Advances the animation by one nominal 16ms tick. Exposed for tests
+  /// so the stroke-advance behavior can be verified without real timers.
   @visibleForTesting
   void advanceTick() {
-    _advance();
+    _advance(_tickSeconds);
   }
 
-  void _advance() {
+  /// Advances the animation by [seconds] of wall time. Exposed for tests
+  /// so stall/throttle bursts can be simulated deterministically.
+  @visibleForTesting
+  void advanceSeconds(double seconds) {
+    _advance(seconds);
+  }
+
+  void _advance(double rawDeltaSeconds) {
     if (!state.isPlaying || state.totalStrokes == 0) {
       return;
     }
@@ -140,13 +169,19 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
       return;
     }
 
+    // Single choke point for the stall guard: however much wall time a
+    // callback missed, one frame may never draw more than this fraction,
+    // so queued/throttled ticks cannot lurch the animation forward.
+    final deltaSeconds =
+        rawDeltaSeconds.clamp(0.0, _maxTickSeconds).toDouble();
+
     // Longer strokes take longer: the tick increment is scaled by the
     // stroke's relative length (weight 1 = longest stroke, smaller =
     // faster), so a 点 sweeps by quickly while a long 横 keeps a natural
     // pace. Missing weights fall back to uniform timing.
     final weight = state.weightAt(state.currentStrokeIndex);
     final nextProgress =
-        state.progress + _tickSeconds * state.speed / weight;
+        state.progress + deltaSeconds * state.speed / weight;
     if (nextProgress < 1) {
       state = state.copyWith(progress: nextProgress);
       return;
@@ -181,7 +216,10 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
 final strokePlayerProvider = StateNotifierProvider.autoDispose
     .family<StrokePlayerController, StrokePlayerState, StrokePlayerKey>(
         (ref, key) {
-  return StrokePlayerController(totalStrokes: key.totalStrokes);
+  return StrokePlayerController(
+    totalStrokes: key.totalStrokes,
+    strokeWeights: key.strokeWeights,
+  );
 });
 
 class StrokePlayerKey {

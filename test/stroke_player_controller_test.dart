@@ -18,7 +18,10 @@ void main() {
     expect(controller.state.isPlaying, true);
 
     await Future<void>.delayed(const Duration(milliseconds: 120));
-    expect(controller.state.progress > 0, true);
+    // Must exceed the 0.01 reseed value: real timer ticks have to move
+    // the drawing, not just leave the seed in place.
+    expect(controller.state.progress > 0.03, true,
+        reason: 'real-time ticks must advance playback');
 
     controller.pause();
     expect(controller.state.isPlaying, false);
@@ -127,6 +130,58 @@ void main() {
     expect(controller.state.currentStrokeIndex, 0);
     expect(controller.state.isPlaying, true);
 
+    controller.dispose();
+  });
+
+  test('a throttled callback never jumps the drawing more than one frame', () {
+    // Chrome throttles background tabs to ~1 timer/s; on return the
+    // queued callback must not replay the whole stall at once.
+    final controller = StrokePlayerController(totalStrokes: 1)
+      ..setSpeed(3.2) // worst case: fastest advertised speed
+      ..togglePlay();
+
+    final startProgress = controller.state.progress;
+    controller.advanceSeconds(5.0); // 5s of missed wall time in one frame
+
+    expect(controller.state.completed, false);
+    // Max single-frame delta is 0.1s of drawing.
+    expect(controller.state.progress,
+        lessThanOrEqualTo(startProgress + 0.1 * 3.2 + 1e-9));
+    controller.dispose();
+  });
+
+  test('back-to-back queued ticks advance by wall time, not per callback',
+      () {
+    final controller = StrokePlayerController(totalStrokes: 1)
+      ..setSpeed(1.0)
+      ..togglePlay();
+
+    for (var i = 0; i < 10; i += 1) {
+      // Ten callbacks delivered back-to-back, each covering ~16ms of
+      // real time: total drawn must be ~160ms, not more.
+      controller.advanceSeconds(0.016);
+    }
+
+    expect(controller.state.progress, closeTo(0.16, 0.02));
+    controller.dispose();
+  });
+
+  test('resuming after a pause does not fast-forward through the pause', () {
+    final controller = StrokePlayerController(totalStrokes: 2)
+      ..togglePlay()
+      ..advanceSeconds(0.05)
+      ..pause();
+
+    final pausedProgress = controller.state.progress;
+
+    controller.togglePlay();
+    controller.advanceSeconds(0.016);
+
+    // One nominal tick past resume — not the pause duration + tick.
+    expect(
+      controller.state.progress,
+      closeTo(pausedProgress + 0.016, 0.004),
+    );
     controller.dispose();
   });
 }

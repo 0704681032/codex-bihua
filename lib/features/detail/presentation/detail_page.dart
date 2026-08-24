@@ -37,7 +37,7 @@ class DetailPage extends ConsumerStatefulWidget {
 }
 
 class _DetailPageState extends ConsumerState<DetailPage> {
-  static const double _autoPlaySpeed = 1.6;
+  static const double _autoPlaySpeed = 1.0;
   static const Map<String, List<String>> _presetWords = <String, List<String>>{
     '母': <String>['母亲', '字母', '母子', '母体', '母猪', '酵母'],
     '笔': <String>['毛笔', '画笔', '笔顺', '笔记', '笔画', '执笔'],
@@ -789,9 +789,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             for (final entry in <double, String>{
-              1.4: '慢速',
-              2.4: '常速',
-              3.2: '快速',
+              0.7: '慢速',
+              1.2: '常速',
+              2.0: '快速',
             }.entries)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -835,9 +835,11 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   }
 
   /// Relative stroke durations from median lengths, normalized so the
-  /// longest stroke plays at 1.0 and short strokes (点) move visibly
-  /// faster. Lengths are measured in glyph coordinates — flipping the y
-  /// axis does not change distances. Strokes without usable medians fall
+  /// *average* stroke plays at 1.0. Anchoring to the mean (not the max)
+  /// keeps the overall pace identical to uniform timing — only dots
+  /// (点) finish visibly faster and long sweeps (横/捺) a little slower.
+  /// Lengths are measured in glyph coordinates — flipping the y axis
+  /// does not change distances. Strokes without usable medians fall
   /// back to the mean length instead of snapping to full speed.
   List<double> _strokeWeights(CharacterEntry entry) {
     final lengths = <double>[
@@ -848,18 +850,14 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       return const <double>[];
     }
 
-    final maxLength = measured.reduce(math.max);
-    if (maxLength <= 0) {
-      return const <double>[];
-    }
     final meanLength =
         measured.fold<double>(0, (sum, length) => sum + length) /
             measured.length;
 
     return <double>[
       for (final length in lengths)
-        ((length > 0 ? length : meanLength) / maxLength)
-            .clamp(0.3, 1.0)
+        ((length > 0 ? length : meanLength) / meanLength)
+            .clamp(0.4, 1.6)
             .toDouble(),
     ];
   }

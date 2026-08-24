@@ -269,11 +269,11 @@ void main() {
     await gotoDetail(tester, '火');
 
     final provider = await capturePlayer(tester, expectedStrokes: 4);
-    // postFrame 回调置速 1.6 并开播, 给它一点真实时间。
+    // postFrame 回调置速 1.0 并开播, 给它一点真实时间。
     await waitReal(tester, const Duration(milliseconds: 800));
 
-    expect(container.read(provider).speed, closeTo(1.6, 0.01),
-        reason: '自动播放应置速 1.6');
+    expect(container.read(provider).speed, closeTo(1.0, 0.01),
+        reason: '自动播放应置速 1.0');
     var state = container.read(provider);
     expect(state.isPlaying || state.completed || state.progress > 0, isTrue,
         reason: '自动播放应已推进');
@@ -334,13 +334,13 @@ void main() {
     await scrollTo(tester, find.text('慢速'));
     await tester.tap(find.text('慢速'));
     await tester.pump();
-    expect(container.read(provider).speed, 1.4);
+    expect(container.read(provider).speed, 0.7);
 
     await scrollTo(tester, find.text('快速'));
     await tester.tap(find.text('快速'));
     await tester.pump();
-    expect(container.read(provider).speed, 3.2,
-        reason: '钳制上限应容纳「快速」预设 3.2');
+    expect(container.read(provider).speed, 2.0,
+        reason: '钳制上限应容纳「快速」预设 2.0');
 
     // 选中的芯片应反映当前速度(修复前 3.2 被钳到 3.0, 快速永远无法选中)
     final fastChip = tester.widget<ChoiceChip>(
@@ -351,7 +351,7 @@ void main() {
     await scrollTo(tester, find.text('常速'));
     await tester.tap(find.text('常速'));
     await tester.pump();
-    expect(container.read(provider).speed, 2.4);
+    expect(container.read(provider).speed, 1.2);
   });
 
   testWidgets('E2E-6 语音按钮不崩溃、不误报失败', (tester) async {
