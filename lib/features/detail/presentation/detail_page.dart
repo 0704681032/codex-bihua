@@ -899,11 +899,14 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
   /// Relative stroke durations from median lengths, normalized so the
   /// *average* stroke plays at 1.0. Anchoring to the mean (not the max)
-  /// keeps the overall pace identical to uniform timing — only dots
-  /// (点) finish visibly faster and long sweeps (横/捺) a little slower.
-  /// Lengths are measured in glyph coordinates — flipping the y axis
-  /// does not change distances. Strokes without usable medians fall
-  /// back to the mean length instead of snapping to full speed.
+  /// keeps the overall pace identical to uniform timing. The raw
+  /// length/mean ratio is then softened halfway toward 1.0 and clamped,
+  /// so short strokes still finish visibly earlier but adjacent strokes
+  /// never differ by several times in pace (阳's two short closing 横
+  /// used to sweep by at ~2.5x right after a 0.65x 横折). Lengths are
+  /// measured in glyph coordinates — flipping the y axis does not
+  /// change distances. Strokes without usable medians fall back to the
+  /// mean length instead of snapping to full speed.
   List<double> _strokeWeights(CharacterEntry entry) {
     final lengths = <double>[
       for (final stroke in entry.strokes) _medianPolylineLength(stroke),
@@ -919,10 +922,18 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
     return <double>[
       for (final length in lengths)
-        ((length > 0 ? length : meanLength) / meanLength)
-            .clamp(0.4, 1.6)
-            .toDouble(),
+        _strokeWeightFor(length, meanLength),
     ];
+  }
+
+  static const double _weightSoftening = 0.5;
+  static const double _minStrokeWeight = 0.6;
+  static const double _maxStrokeWeight = 1.35;
+
+  double _strokeWeightFor(double length, double meanLength) {
+    final raw = (length > 0 ? length : meanLength) / meanLength;
+    final softened = 1.0 + (raw - 1.0) * _weightSoftening;
+    return softened.clamp(_minStrokeWeight, _maxStrokeWeight).toDouble();
   }
 
   double _medianPolylineLength(StrokePath stroke) {

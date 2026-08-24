@@ -31,10 +31,11 @@ class StrokePlayerState {
   final int totalStrokes;
 
   /// Per-stroke duration factors anchored to the *average* stroke
-  /// (mean = 1.0): typical strokes keep the uniform-timing pace, a 点
-  /// with weight 0.4 animates visibly faster and a long 横 at 1.6 a
-  /// little slower. An empty list means every stroke plays with the
-  /// same duration.
+  /// (mean = 1.0), softened toward the mean by the producer: typical
+  /// strokes keep the uniform-timing pace, a 点 finishes visibly
+  /// faster and a long 横/捺 a little slower, while adjacent strokes
+  /// stay within a gentle pace ratio. An empty list means every stroke
+  /// plays with the same duration.
   final List<double> strokeWeights;
 
   bool get completed => currentStrokeIndex >= totalStrokes;
