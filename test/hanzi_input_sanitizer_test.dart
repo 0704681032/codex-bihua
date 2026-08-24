@@ -13,5 +13,11 @@ void main() {
       expect(result.length, 4);
       expect(result, <String>['笔', '顺', '查', '询']);
     });
+
+    test('accepts CJK radicals supplement chars present in the dictionary',
+        () {
+      final result = HanziInputSanitizer.sanitize('⺀⺮⺼万');
+      expect(result, <String>['⺀', '⺮', '⺼', '万']);
+    });
   });
 }

@@ -1,3 +1,5 @@
+import 'playback_speeds.dart';
+
 class StrokePlayerState {
   const StrokePlayerState({
     required this.currentStrokeIndex,
@@ -15,7 +17,7 @@ class StrokePlayerState {
     return StrokePlayerState(
       currentStrokeIndex: totalStrokes,
       isPlaying: false,
-      speed: 0.9,
+      speed: PlaybackSpeeds.defaultSpeed,
       progress: totalStrokes > 0 ? 1 : 0,
       totalStrokes: totalStrokes,
       strokeWeights: strokeWeights,

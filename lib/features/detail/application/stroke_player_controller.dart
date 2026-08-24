@@ -69,6 +69,20 @@ class StrokePlayerController extends StateNotifier<StrokePlayerState> {
     state = state.copyWith(isPlaying: false);
   }
 
+  /// 跳到第 [index] 笔并完整显示（点击笔顺表某笔时使用），
+  /// 语义与 nextStroke/previousStroke 一致：跳转即暂停。
+  void jumpToStroke(int index) {
+    if (state.totalStrokes == 0) {
+      return;
+    }
+    final clamped = index.clamp(0, state.totalStrokes - 1);
+    state = state.copyWith(
+      currentStrokeIndex: clamped,
+      progress: 1,
+      isPlaying: false,
+    );
+  }
+
   void nextStroke() {
     if (state.totalStrokes == 0) {
       return;

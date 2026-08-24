@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/application/brightness_controller.dart';
@@ -74,6 +75,14 @@ class _HanziStrokeAppState extends ConsumerState<HanziStrokeApp> {
       debugShowCheckedModeBanner: false,
       title: '汉字笔画',
       theme: buildAppTheme(),
+      // Material 内置组件（文本选择菜单、日期控件等）跟随中文。
+      locale: const Locale('zh'),
+      supportedLocales: const <Locale>[Locale('zh'), Locale('en')],
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       initialRoute: _initialRoute,
       navigatorKey: _navigatorKey,
       navigatorObservers: <NavigatorObserver>[_routeObserver],

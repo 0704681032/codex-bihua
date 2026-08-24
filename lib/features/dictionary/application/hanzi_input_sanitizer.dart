@@ -17,7 +17,8 @@ class HanziInputSanitizer {
   }
 
   static bool _isCjk(int rune) {
-    return (rune >= 0x3400 && rune <= 0x4DBF) ||
+    return (rune >= 0x2E80 && rune <= 0x2FDF) ||
+        (rune >= 0x3400 && rune <= 0x4DBF) ||
         (rune >= 0x4E00 && rune <= 0x9FFF) ||
         (rune >= 0x20000 && rune <= 0x2A6DF) ||
         (rune >= 0x2A700 && rune <= 0x2B73F) ||

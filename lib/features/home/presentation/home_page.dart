@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/dashed_line.dart' as dashed;
 import '../../../core/widgets/hanzi_search_bar.dart';
 import '../../../core/widgets/main_bottom_nav.dart';
 import '../../dictionary/application/dictionary_providers.dart';
@@ -26,9 +27,20 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   FilterCriteria _criteria = const FilterCriteria();
   List<CharacterEntry> _searchResults = <CharacterEntry>[];
+  List<CharacterEntry> _filterResultsAll = <CharacterEntry>[];
   List<CharacterEntry> _filterResults = <CharacterEntry>[];
+  bool _searchPanelExpanded = true;
+  bool _filterPanelExpanded = true;
   bool _examplesExpanded = true;
   bool _confusablesExpanded = true;
+
+  /// 筛选结果默认展示的字数；超出部分点「显示全部」展开，避免一次
+  /// 渲染几千张字卡，同时不再静默截断。
+  static const int _filterResultPageSize = 80;
+
+  int _searchToken = 0;
+  int _filterToken = 0;
+  bool _detailPushInFlight = false;
 
   @override
   void initState() {
@@ -44,7 +56,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   DictionaryRepository get _repo => ref.read(dictionaryRepositoryProvider);
 
   Future<void> _performSearch() async {
-    final rawChars = HanziInputSanitizer.sanitize(_searchController.text, maxLength: 240);
+    // 多取 1 个汉字用于检测超限，实际查询仍以 20 个为上限（与详情页一致）。
+    final rawChars =
+        HanziInputSanitizer.sanitize(_searchController.text, maxLength: 21);
     if (rawChars.isEmpty) {
       _showSnack('请输入 1~20 个汉字');
       return;
@@ -55,8 +69,9 @@ class _HomePageState extends ConsumerState<HomePage> {
       _showSnack('最多支持前 20 个汉字');
     }
 
+    final token = ++_searchToken;
     final result = await _repo.searchByChars(limited);
-    if (!mounted) {
+    if (!mounted || token != _searchToken) {
       return;
     }
 
@@ -75,6 +90,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _applyFilter() async {
+    final token = ++_filterToken;
     if (_criteria.isEmpty) {
       setState(() {
         _filterResults = <CharacterEntry>[];
@@ -83,12 +99,13 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
 
     final result = await _repo.filter(_criteria);
-    if (!mounted) {
+    if (!mounted || token != _filterToken) {
       return;
     }
 
     setState(() {
-      _filterResults = result.take(80).toList(growable: false);
+      _filterResultsAll = result;
+      _filterResults = result.take(_filterResultPageSize).toList(growable: false);
     });
   }
 
@@ -102,11 +119,12 @@ class _HomePageState extends ConsumerState<HomePage> {
       options: options,
       selectedValue: _criteria.pinyin,
     );
-    if (!mounted) {
+    // 下滑/点遮罩关闭（null）保留原筛选，仅「清除筛选」('') 才清空，与笔画弹层一致。
+    if (!mounted || selected == null) {
       return;
     }
     setState(() {
-      _criteria = selected == null
+      _criteria = selected.isEmpty
           ? _criteria.copyWith(clearPinyin: true)
           : _criteria.copyWith(pinyin: selected);
     });
@@ -123,11 +141,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       options: options,
       selectedValue: _criteria.radical,
     );
-    if (!mounted) {
+    if (!mounted || selected == null) {
       return;
     }
     setState(() {
-      _criteria = selected == null
+      _criteria = selected.isEmpty
           ? _criteria.copyWith(clearRadical: true)
           : _criteria.copyWith(radical: selected);
     });
@@ -256,19 +274,20 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         );
       },
-    ).then((value) {
-      if (value == '') {
-        return null;
-      }
-      return value;
-    });
+    );
   }
 
   void _openDetail(String char) {
-    Navigator.of(context).pushNamed(
-      AppRouter.detailRouteFor(char),
-      arguments: DetailRouteArgs(char: char),
-    );
+    if (_detailPushInFlight) {
+      return;
+    }
+    _detailPushInFlight = true;
+    Navigator.of(context)
+        .pushNamed(
+          AppRouter.detailRouteFor(char),
+          arguments: DetailRouteArgs(char: char),
+        )
+        .whenComplete(() => _detailPushInFlight = false);
   }
 
   void _showSnack(String message) {
@@ -292,9 +311,28 @@ class _HomePageState extends ConsumerState<HomePage> {
       body: warmup.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('字库加载失败: $error'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('字库加载失败，请重试'),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  '$error',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => ref.refresh(dictionaryWarmUpProvider),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('重试'),
+              ),
+            ],
           ),
         ),
         data: (_) => SafeArea(
@@ -338,11 +376,29 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
                 if (_searchResults.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 18),
-                  _buildResultPanel('查询结果', _searchResults),
+                  _buildResultPanel(
+                    title: '查询结果（共 ${_searchResults.length} 字）',
+                    data: _searchResults,
+                    expanded: _searchPanelExpanded,
+                    onToggle: () => setState(
+                        () => _searchPanelExpanded = !_searchPanelExpanded),
+                  ),
                 ],
                 if (_filterResults.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 18),
-                  _buildResultPanel('筛选结果', _filterResults),
+                  _buildResultPanel(
+                    title: '筛选结果（共 ${_filterResultsAll.length} 字）',
+                    data: _filterResults,
+                    expanded: _filterPanelExpanded,
+                    onToggle: () => setState(
+                        () => _filterPanelExpanded = !_filterPanelExpanded),
+                    onShowAll:
+                        _filterResultsAll.length > _filterResults.length
+                            ? () => setState(() {
+                                  _filterResults = _filterResultsAll;
+                                })
+                            : null,
+                  ),
                 ],
                 const SizedBox(height: 18),
                 _buildExamplesSection(),
@@ -398,12 +454,35 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildResultPanel(String title, List<CharacterEntry> data) {
+  Widget _buildResultPanel({
+    required String title,
+    required List<CharacterEntry> data,
+    required bool expanded,
+    required VoidCallback onToggle,
+    VoidCallback? onShowAll,
+  }) {
     return CollapsibleHanziSection(
       title: title,
-      expanded: true,
-      onToggle: () {},
-      child: _buildHanziGrid(data),
+      expanded: expanded,
+      onToggle: onToggle,
+      child: Column(
+        children: <Widget>[
+          _buildHanziGrid(data),
+          if (onShowAll != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Center(
+                child: TextButton(
+                  onPressed: onShowAll,
+                  child: const Text(
+                    '已显示前 80 字，点击显示全部',
+                    style: TextStyle(color: AppPalette.primaryBrown),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -471,24 +550,12 @@ class _CircleGuidePainter extends CustomPainter {
       ..color = AppPalette.guideRed.withValues(alpha: 0.55)
       ..strokeWidth = 2;
 
-    _drawDashedLine(canvas, Offset(size.width / 2, 0), Offset(size.width / 2, size.height), paint);
-    _drawDashedLine(canvas, Offset(0, size.height / 2), Offset(size.width, size.height / 2), paint);
-  }
-
-  void _drawDashedLine(Canvas canvas, Offset start, Offset end, Paint paint) {
-    const dash = 7.0;
-    const gap = 6.0;
-    final delta = end - start;
-    final total = delta.distance;
-    final direction = delta / total;
-
-    var current = 0.0;
-    while (current < total) {
-      final from = start + direction * current;
-      final to = start + direction * (current + dash).clamp(0, total);
-      canvas.drawLine(from, to, paint);
-      current += dash + gap;
-    }
+    dashed.drawDashedLine(
+        canvas, Offset(size.width / 2, 0), Offset(size.width / 2, size.height), paint,
+        dash: 7, gap: 6);
+    dashed.drawDashedLine(
+        canvas, Offset(0, size.height / 2), Offset(size.width, size.height / 2), paint,
+        dash: 7, gap: 6);
   }
 
   @override

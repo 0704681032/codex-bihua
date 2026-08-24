@@ -15,6 +15,7 @@ import '../../dictionary/application/dictionary_providers.dart';
 import '../../dictionary/application/hanzi_input_sanitizer.dart';
 import '../../dictionary/domain/character_entry.dart';
 import '../../dictionary/domain/stroke_path.dart';
+import '../application/playback_speeds.dart';
 import '../application/reference_data.dart';
 import '../application/stroke_classifier.dart';
 import '../application/stroke_player_controller.dart';
@@ -37,7 +38,6 @@ class DetailPage extends ConsumerStatefulWidget {
 }
 
 class _DetailPageState extends ConsumerState<DetailPage> {
-  static const double _autoPlaySpeed = 1.0;
   static const Map<String, List<String>> _presetWords = <String, List<String>>{
     '母': <String>['母亲', '字母', '母子', '母体', '母猪', '酵母'],
     '笔': <String>['毛笔', '画笔', '笔顺', '笔记', '笔画', '执笔'],
@@ -82,12 +82,15 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   };
 
   late final TextEditingController _searchController;
+  int _searchToken = 0;
   FlutterTts? _tts;
   final String _playerSessionId = UniqueKey().toString();
   String? _autoPlayStartedKey;
   bool _ttsInitializing = true;
   bool _ttsAvailable = false;
 
+  /// 笔顺动画区的锚点：点击笔顺表某笔后把动画区滚回视野。
+  final GlobalKey _animationSectionKey = GlobalKey();
   bool _basicInfoExpanded = true;
   bool _strokeTableExpanded = true;
   bool _explanationExpanded = true;
@@ -194,9 +197,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     }
 
     final target = chars.first;
+    final token = ++_searchToken;
     final entry =
         await ref.read(dictionaryRepositoryProvider).getByChar(target);
-    if (!mounted) {
+    if (!mounted || token != _searchToken) {
       return;
     }
     if (entry == null) {
@@ -259,11 +263,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       appBar: AppBar(
         title: Text('「${widget.char}」的笔顺详情'),
         leading: IconButton(
+          tooltip: '返回',
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         actions: <Widget>[
           IconButton(
+            tooltip: '分享',
             icon: const Icon(Icons.share_rounded),
             onPressed: () => _showSnack('分享功能将在后续版本开放'),
           ),
@@ -271,7 +277,23 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       ),
       body: characterAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(child: Text('加载失败: $error')),
+        error: (error, stack) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('加载失败，请重试'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () =>
+                    ref.refresh(characterByCharProvider(widget.char)),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
         data: (entry) {
           if (entry == null) {
             return const Center(child: Text('未找到该汉字'));
@@ -295,7 +317,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               if (!mounted) {
                 return;
               }
-              player.setSpeed(_autoPlaySpeed);
+              player.setSpeed(PlaybackSpeeds.defaultSpeed);
               if (!ref.read(provider).isPlaying) {
                 player.togglePlay();
               }
@@ -303,12 +325,11 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           }
 
           final strokeNames = _resolveStrokeNames(entry);
-          // 组词/中文释义来自懒加载的离线数据集; 未就绪或缺失时回退到
-          // 内置词表, 再退到"词库建设中"占位。
-          final datasetWords =
-              ref.watch(wordsForCharProvider(entry.char)).valueOrNull;
-          final zhDefinition =
-              ref.watch(definitionZhProvider(entry.char)).valueOrNull;
+          // 组词/中文释义来自懒加载的离线数据集; 未就绪时先显示加载态,
+          // 就绪后缺失才回退到内置词表, 再退到"词库建设中"占位。
+          final wordsAsync = ref.watch(wordsForCharProvider(entry.char));
+          final definitionAsync = ref.watch(definitionZhProvider(entry.char));
+          final datasetWords = wordsAsync.valueOrNull;
           final wordCards = _resolveWordCards(entry, datasetWords);
           final definitions = _resolveDefinitions(entry);
 
@@ -333,6 +354,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                       _buildTopActionBar(entry),
                       const SizedBox(height: 10),
                       _SectionCard(
+                        key: _animationSectionKey,
                         title: '笔顺动画',
                         expanded: true,
                         showToggle: false,
@@ -365,7 +387,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                             _strokeTableExpanded = !_strokeTableExpanded;
                           });
                         },
-                        child: _buildStrokeTable(entry, strokeNames),
+                        child: _buildStrokeTable(entry, strokeNames, player),
                       ),
                       const SizedBox(height: 10),
                       _SectionCard(
@@ -377,7 +399,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                           });
                         },
                         child: _buildExplanationBlock(
-                            entry, definitions, zhDefinition),
+                            entry, definitions, definitionAsync),
                       ),
                       const SizedBox(height: 10),
                       _SectionCard(
@@ -388,7 +410,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                             _wordsExpanded = !_wordsExpanded;
                           });
                         },
-                        child: _buildWordsGrid(wordCards),
+                        child: _buildWordsGrid(wordsAsync, wordCards),
                       ),
                     ],
                   ),
@@ -416,6 +438,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: <Widget>[
           IconButton(
+            tooltip: '朗读',
             onPressed: () => _speakCharacter(entry),
             icon: const Icon(
               Icons.volume_up_rounded,
@@ -424,6 +447,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             ),
           ),
           IconButton(
+            tooltip: '会员',
             onPressed: () => _showSnack('会员能力展示占位'),
             icon: const Icon(
               Icons.diamond_rounded,
@@ -432,6 +456,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             ),
           ),
           IconButton(
+            tooltip: '屏幕亮度',
             onPressed: _showBrightnessSheet,
             icon: const Icon(
               Icons.wb_sunny_outlined,
@@ -440,6 +465,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             ),
           ),
           IconButton(
+            tooltip: '田字格模式',
             onPressed: () => _showSnack('田字格模式切换将在后续版本开放'),
             icon: const Icon(
               Icons.copy_all_outlined,
@@ -448,6 +474,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             ),
           ),
           IconButton(
+            tooltip: '设置',
             onPressed: () => _showSnack('设置面板将在后续版本开放'),
             icon: const Icon(
               Icons.settings_rounded,
@@ -460,14 +487,25 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     );
   }
 
+  /// 点击笔顺表某笔：暂停并完整显示该笔，同时把动画区滚回视野。
+  void _jumpToStroke(StrokePlayerController player, int index) {
+    player.jumpToStroke(index);
+    final ctx = _animationSectionKey.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 300),
+        alignment: 0.1,
+      );
+    }
+  }
+
   Widget _buildBasicInfo(CharacterEntry entry, List<String> strokeNames) {
+    // 只展示字库里真实存在的字段。结构/造字法/五行没有可靠数据源，
+    // 旧版按笔画数猜测的结果是错的，宁可少展示也不展示错误事实。
     final infoItems = <_InfoItem>[
       _InfoItem(label: '笔画数', value: '${entry.strokeCount}'),
-      _InfoItem(label: '结构', value: _guessStructure(entry.strokeCount)),
       _InfoItem(label: '部首', value: entry.radical),
-      _InfoItem(label: '造字法', value: _guessFormation(entry)),
-      _InfoItem(label: '繁体', value: entry.char),
-      _InfoItem(label: '五行', value: _guessElement(entry.radical)),
     ];
 
     return Column(
@@ -531,7 +569,11 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     );
   }
 
-  Widget _buildStrokeTable(CharacterEntry entry, List<String> strokeNames) {
+  Widget _buildStrokeTable(
+    CharacterEntry entry,
+    List<String> strokeNames,
+    StrokePlayerController player,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Fewer columns on narrow screens keeps each preview readable.
@@ -554,6 +596,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                 name: name,
                 entry: entry,
                 tileSize: width,
+                onTap: () => _jumpToStroke(player, index),
               ),
             );
           }),
@@ -565,8 +608,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   Widget _buildExplanationBlock(
     CharacterEntry entry,
     List<String> definitions,
-    String? zhDefinition,
+    AsyncValue<String?> zhDefinitionAsync,
   ) {
+    final zhDefinition = zhDefinitionAsync.valueOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -578,7 +622,18 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           ),
         ),
         const SizedBox(height: 12),
-        if (zhDefinition != null && zhDefinition.isNotEmpty) ...<Widget>[
+        if (zhDefinitionAsync.isLoading) ...<Widget>[
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Center(
+              child: SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              ),
+            ),
+          ),
+        ] else if (zhDefinition != null && zhDefinition.isNotEmpty) ...<Widget>[
           Text(
             '• $zhDefinition',
             style: const TextStyle(fontSize: 17, height: 1.65),
@@ -628,7 +683,20 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     );
   }
 
-  Widget _buildWordsGrid(List<WordCard> words) {
+  Widget _buildWordsGrid(
+      AsyncValue<List<WordCard>?> wordsAsync, List<WordCard> words) {
+    if (wordsAsync.isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 18),
+        child: Center(
+          child: SizedBox(
+            height: 26,
+            width: 26,
+            child: CircularProgressIndicator(strokeWidth: 2.2),
+          ),
+        ),
+      );
+    }
     if (words.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 18),
@@ -788,18 +856,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            for (final entry in <double, String>{
-              0.7: '慢速',
-              1.2: '常速',
-              2.0: '快速',
-            }.entries)
+            for (final (speed, label) in PlaybackSpeeds.presets)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: ChoiceChip(
-                  label: Text(entry.value),
-                  selected:
-                      (state.speed - entry.key).abs() < 0.01,
-                  onSelected: (_) => controller.setSpeed(entry.key),
+                  label: Text(label),
+                  selected: (state.speed - speed).abs() < 0.01,
+                  onSelected: (_) => controller.setSpeed(speed),
                   visualDensity: VisualDensity.compact,
                 ),
               ),
@@ -921,44 +984,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         '${wordText.isEmpty ? '' : '常见组词：$wordText。'}';
   }
 
-  String _guessStructure(int strokeCount) {
-    if (strokeCount <= 4) {
-      return '独体字';
-    }
-    if (strokeCount <= 8) {
-      return '上下结构';
-    }
-    return '左右结构';
-  }
-
-  String _guessFormation(CharacterEntry entry) {
-    if (entry.synthetic) {
-      return '待补充';
-    }
-    if (entry.strokeCount <= 5) {
-      return '象形';
-    }
-    return '形声';
-  }
-
-  String _guessElement(String radical) {
-    const map = <String, String>{
-      '氵': '水',
-      '水': '水',
-      '火': '火',
-      '灬': '火',
-      '木': '木',
-      '金': '金',
-      '钅': '金',
-      '土': '土',
-      '石': '土',
-      '日': '火',
-      '月': '木',
-      '口': '木',
-    };
-    return map[radical] ?? '待补充';
-  }
-
   void _showEncyclopediaSheet(
     CharacterEntry entry,
     String? zhDefinition,
@@ -1059,6 +1084,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
+    super.key,
     required this.title,
     required this.expanded,
     required this.child,
@@ -1213,12 +1239,14 @@ class _StrokeTile extends StatelessWidget {
     required this.name,
     required this.entry,
     required this.tileSize,
+    this.onTap,
   });
 
   final int index;
   final String name;
   final CharacterEntry entry;
   final double tileSize;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1230,9 +1258,12 @@ class _StrokeTile extends StatelessWidget {
       totalStrokes: entry.strokes.length,
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: <Widget>[
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
         Text(
           '第${index + 1}笔',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -1251,7 +1282,8 @@ class _StrokeTile extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontSize: 15),
         ),
-      ],
+        ],
+      ),
     );
   }
 }

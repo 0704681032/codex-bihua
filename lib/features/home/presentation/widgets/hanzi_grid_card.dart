@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/dashed_line.dart' as dashed;
 import '../../../dictionary/domain/character_entry.dart';
 
 class HanziGridCard extends StatelessWidget {
@@ -74,24 +75,8 @@ class _GuideGridPainter extends CustomPainter {
     final centerX = size.width / 2;
     final centerY = size.height / 2;
 
-    _drawDashedLine(canvas, Offset(centerX, 0), Offset(centerX, size.height), paint);
-    _drawDashedLine(canvas, Offset(0, centerY), Offset(size.width, centerY), paint);
-  }
-
-  void _drawDashedLine(Canvas canvas, Offset from, Offset to, Paint paint) {
-    const dash = 4.0;
-    const gap = 3.0;
-    final delta = to - from;
-    final distance = delta.distance;
-    final direction = delta / distance;
-
-    var drawn = 0.0;
-    while (drawn < distance) {
-      final start = from + direction * drawn;
-      final end = from + direction * (drawn + dash).clamp(0, distance);
-      canvas.drawLine(start, end, paint);
-      drawn += dash + gap;
-    }
+    dashed.drawDashedLine(canvas, Offset(centerX, 0), Offset(centerX, size.height), paint, dash: 4, gap: 3);
+    dashed.drawDashedLine(canvas, Offset(0, centerY), Offset(size.width, centerY), paint, dash: 4, gap: 3);
   }
 
   @override

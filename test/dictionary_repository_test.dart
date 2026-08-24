@@ -85,6 +85,30 @@ void main() {
       expect(synthetic!.synthetic, isTrue);
     });
 
+    test('radical options derive from the index, not radicals.json', () async {
+      final noInflateRepo = AssetDictionaryRepository(
+        bundle: _FakeAssetBundle(<String, String>{
+          'assets/data/chars_index.json': '''
+{
+  "shardSize": 2,
+  "chars": [
+    {"c": "笔", "p": "bi3", "r": "竹", "n": 2, "s": 0},
+    {"c": "顺", "p": "shun4", "r": "页", "n": 1, "s": 0}
+  ]
+}
+''',
+          'assets/data/shards/shard_000.json': '[]',
+          // 「戶」不在索引里（简体数据用「户」），不允许成为死选项。
+          'assets/data/radicals.json': '["竹", "页", "戶"]',
+        }),
+      );
+      await noInflateRepo.warmUp();
+
+      final radicals = await noInflateRepo.getAvailableRadicals();
+      expect(radicals, <String>['竹', '页'],
+          reason: '部首选项必须来自索引实际数据，避免选中后查不到字');
+    });
+
     test('filters by pinyin/radical/stroke count', () async {
       await repo.warmUp();
       final pinyin = await repo.filter(const FilterCriteria(pinyin: 'bi3'));

@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui' show Path;
 
+import 'package:flutter/foundation.dart'
+    show ErrorDescription, FlutterError, FlutterErrorDetails;
 import 'package:flutter/material.dart' show Offset, Rect;
 import 'package:path_drawing/path_drawing.dart';
 
@@ -364,7 +366,14 @@ class StrokeReveal {
 Path parseStrokeSvg(String svgPath) {
   try {
     return parseSvgPathData(svgPath);
-  } catch (_) {
+  } catch (error, stackTrace) {
+    // 旧行为是静默返回空 Path，但那样笔画会无声消失；失败必须可见于日志。
+    FlutterError.reportError(FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'stroke_reveal',
+      context: ErrorDescription('解析 SVG 笔画路径失败'),
+    ));
     return Path();
   }
 }

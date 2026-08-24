@@ -197,7 +197,7 @@ class AssetDictionaryRepository implements DictionaryRepository {
 
     final radicals = await _loadRadicals();
     _inflateToMinDictionary(radicals);
-    _buildIndexes(radicals);
+    _buildIndexes();
     _loaded = true;
   }
 
@@ -362,7 +362,7 @@ class AssetDictionaryRepository implements DictionaryRepository {
     }
   }
 
-  void _buildIndexes(List<String> radicals) {
+  void _buildIndexes() {
     _byPinyin.clear();
     _byRadical.clear();
     _byStrokeCount.clear();
@@ -391,8 +391,9 @@ class AssetDictionaryRepository implements DictionaryRepository {
       list.sort();
     }
 
-    final allRadicals = <String>{...radicals, ..._byRadical.keys};
-    _knownRadicals = allRadicals.toList(growable: false)..sort();
+    // 部首选项只来自索引中实际出现的数据，避免出现选中后永远查不到
+    // 字的死选项（如简体数据里的繁体「戶」）。
+    _knownRadicals = _byRadical.keys.toList(growable: false)..sort();
   }
 
   List<CharacterEntry> _resolveEntries(Set<String> chars) {

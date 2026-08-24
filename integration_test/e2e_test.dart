@@ -351,7 +351,8 @@ void main() {
     await scrollTo(tester, find.text('常速'));
     await tester.tap(find.text('常速'));
     await tester.pump();
-    expect(container.read(provider).speed, 1.2);
+    // 常速预设 = 自动播放基准 1.0（与 PlaybackSpeeds.normal 对齐）。
+    expect(container.read(provider).speed, 1.0);
   });
 
   testWidgets('E2E-6 语音按钮不崩溃、不误报失败', (tester) async {

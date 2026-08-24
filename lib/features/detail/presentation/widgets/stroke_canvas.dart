@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/dashed_line.dart' as dashed;
 import '../../../dictionary/domain/character_entry.dart';
 import '../../../dictionary/domain/stroke_path.dart';
+import '../../application/stroke_geometry.dart';
 import '../../application/stroke_player_state.dart';
 import '../../application/stroke_reveal.dart';
 
@@ -23,39 +25,22 @@ class StrokeCanvas extends StatefulWidget {
 }
 
 class _StrokeCanvasState extends State<StrokeCanvas> {
-  late List<Path> _paths;
-  late List<List<BrushStamp>> _brushStamps;
+  late StrokeGeometry _geometry;
 
   @override
   void initState() {
     super.initState();
-    _rebuildGeometry();
+    _geometry = StrokeGeometryCache.of(widget.entry);
   }
 
   @override
   void didUpdateWidget(covariant StrokeCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.entry.char != widget.entry.char) {
-      _rebuildGeometry();
+    // 按内容校验键取缓存：同字不同笔画数据不会复用旧几何，命中则零开销。
+    final geometry = StrokeGeometryCache.of(widget.entry);
+    if (!identical(geometry, _geometry)) {
+      _geometry = geometry;
     }
-  }
-
-  void _rebuildGeometry() {
-    _paths = [
-      for (final stroke in widget.entry.strokes)
-        parseStrokeSvg(stroke.svgPath),
-    ];
-    final profiles = StrokeReveal.computeWidthProfiles(
-      widget.entry.strokes,
-      _paths,
-    );
-    _brushStamps = <List<BrushStamp>>[
-      for (var i = 0; i < widget.entry.strokes.length; i += 1)
-        StrokeReveal.buildBrushStamps(
-          _medianOffsetsOf(widget.entry.strokes[i]) ?? const <Offset>[],
-          profiles[i],
-        ),
-    ];
   }
 
   @override
@@ -67,28 +52,19 @@ class _StrokeCanvasState extends State<StrokeCanvas> {
           border: Border.all(color: AppPalette.guideRed, width: 3),
           color: const Color(0xFFF1F2F4),
         ),
-        child: CustomPaint(
-          painter: _StrokeCanvasPainter(
-            paths: _paths,
-            strokes: widget.entry.strokes,
-            flipYAxis: widget.entry.flipYAxis,
-            state: widget.playerState,
-            brushStamps: _brushStamps,
+        child: RepaintBoundary(
+          child: CustomPaint(
+            painter: _StrokeCanvasPainter(
+              paths: _geometry.paths,
+              strokes: widget.entry.strokes,
+              flipYAxis: widget.entry.flipYAxis,
+              state: widget.playerState,
+              brushStamps: _geometry.brushStamps,
+            ),
           ),
         ),
       ),
     );
-  }
-
-  List<Offset>? _medianOffsetsOf(StrokePath stroke) {
-    final offsets = stroke.medianPoints
-        .where((p) => p.length >= 2)
-        .map((p) => Offset(p[0], p[1]))
-        .toList(growable: false);
-    if (offsets.length < 2) {
-      return null;
-    }
-    return offsets;
   }
 }
 
@@ -281,29 +257,10 @@ class _StrokeCanvasPainter extends CustomPainter {
     final midX = size.width / 2;
     final midY = size.height / 2;
 
-    _drawDashedLine(
+    dashed.drawDashedLine(
         canvas, Offset(midX, 0), Offset(midX, size.height), guidePaint);
-    _drawDashedLine(
+    dashed.drawDashedLine(
         canvas, Offset(0, midY), Offset(size.width, midY), guidePaint);
-  }
-
-  void _drawDashedLine(Canvas canvas, Offset from, Offset to, Paint paint) {
-    const dash = 11.0;
-    const gap = 8.0;
-    final delta = to - from;
-    final distance = delta.distance;
-    if (distance == 0) {
-      return;
-    }
-    final direction = delta / distance;
-
-    var offset = 0.0;
-    while (offset < distance) {
-      final start = from + direction * offset;
-      final end = from + direction * (offset + dash).clamp(0, distance);
-      canvas.drawLine(start, end, paint);
-      offset += dash + gap;
-    }
   }
 
   @override
