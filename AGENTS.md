@@ -59,6 +59,26 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
 - [x] 笔画名称分类器 —— 双轨制：cnchar-order 权威名称（6807 字）+ `StrokeClassifier` 几何回退（重构为独立模块）；32 字官方金样集回归测试通过
 - [x] 浏览器返回键联动 —— URL pushState + popstate 监听 + NavigatorObserver 统一同步（`app.dart` / `web_url_web.dart`）
 
+## 待办（2026-08-25 记录）：灰笔在黑笔旁「看起来突然加粗」
+
+- [ ] 现象：播放到「阳」后两笔（日内短横）时，灰色横杠显得突然变粗。
+- [ ] 已查明（像素级测量，非墨迹变粗）：灰色横杠厚度在所有播放状态下恒定
+      （约 33~40 设备px / 11~13 逻辑px）；观感变化来自交接处——字库轮廓在
+      笔画交接处互相重叠，全灰时同色重叠不可见，前序笔画变黑后灰色横杠的
+      圆头端帽/重叠区以黑为衬底显形，读作「加粗」。
+- [ ] 已试并搁置：两遍绘制（先灰后黑，黑压灰）——凸起仍在，且测量发现
+      个别列灰色游程出现 12/11 断裂（疑似黑笔轮廓啃掉灰笔边缘的新伪影），
+      该实验已回退，勿直接重用。
+- [ ] 候选方向（明天从这里开始）：
+      a) 灰色未完成笔画合并成单一 silhouette（`Path.combine(PathOperation.union)`）
+         再填充，消除内部重叠与接缝；
+      b) 调大灰色与黑色的明度差或给灰笔描一圈更浅的边，降低黑底衬出的轮廓感；
+      c) 数据侧：生成字库时对交接处做去重叠处理（成本高，最后考虑）。
+- [ ] 复现/测量方法：widget test 里 `RepaintBoundary` 只包 300×300 画布，
+      `tester.runAsync(() => boundary.toImage(pixelRatio: 3))` 取 rawRGBA，
+      按列统计 `strokeGrey(0xFFCFCFD4)` 竖向游程；注意 toImage 不包在
+      runAsync 里会永久挂起。
+
 ### 后续可选优化
 
 - 首页性能已解决（38MB→435KB 索引启动）。若需进一步优化详情页首开，可把分片粒度从 256 字降到 64 字。
