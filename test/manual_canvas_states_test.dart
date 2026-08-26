@@ -57,7 +57,7 @@ void main() {
     await renderState(
       tester,
       'playing_stroke2_mid',
-      StrokePlayerState(
+      const StrokePlayerState(
         currentStrokeIndex: 1,
         isPlaying: true,
         speed: 1.6,
@@ -69,7 +69,7 @@ void main() {
     await renderState(
       tester,
       'after_next',
-      StrokePlayerState(
+      const StrokePlayerState(
         currentStrokeIndex: 2,
         isPlaying: false,
         speed: 1.6,
@@ -81,7 +81,7 @@ void main() {
     await renderState(
       tester,
       'after_prev',
-      StrokePlayerState(
+      const StrokePlayerState(
         currentStrokeIndex: 3,
         isPlaying: false,
         speed: 1.6,

@@ -4,7 +4,12 @@
 
 - 首页：1~20 汉字查询、拼音/笔画/部首筛选、汉字举例、易错汉字。
 - 详情页：汉字笔顺展示、打开页面自动播放（慢速）、播放/暂停、上一笔/下一笔控制。
-- 离线字库：`assets/data/chars_3500.json`（当前为 9565 个真实汉字笔画条目）。
+- 离线字库（按需分片加载，详见 `docs/字库更新指南.md`）：
+  - `assets/data/chars_index.json`（~440KB 轻量索引，启动即加载，9574 字）；
+  - `assets/data/shards/`（150 片 × 64 字笔画数据，详情页按需加载）；
+  - `assets/data/references/`（组词+中文释义参考分片，与笔画分片同编号）。
+  - `chars_3500.json` / `stroke_names.json` / `words.json` / `definitions_zh.json`
+    是数据管线中间产物，不打包进应用，勿手改。
 
 ## 目录
 
@@ -39,10 +44,9 @@ flutter run -d android
 
 ## Chrome 运行与 APK 打包
 
-在项目根目录执行：
+在本仓库根目录执行：
 
 ```bash
-cd /Users/jyy/Documents/bihua
 flutter pub get
 ```
 

@@ -14,6 +14,7 @@ import '../../../core/widgets/main_bottom_nav.dart';
 import '../../dictionary/application/dictionary_providers.dart';
 import '../../dictionary/application/hanzi_input_sanitizer.dart';
 import '../../dictionary/domain/character_entry.dart';
+import '../../dictionary/domain/dictionary_repository.dart';
 import '../../dictionary/domain/stroke_path.dart';
 import '../application/playback_speeds.dart';
 import '../application/reference_data.dart';
@@ -198,8 +199,15 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
     final target = chars.first;
     final token = ++_searchToken;
-    final entry =
-        await ref.read(dictionaryRepositoryProvider).getByChar(target);
+    final CharacterEntry? entry;
+    try {
+      entry = await ref.read(dictionaryRepositoryProvider).getByChar(target);
+    } on StrokeShardLoadException {
+      if (mounted && token == _searchToken) {
+        _showSnack('笔画资源加载失败，请重试');
+      }
+      return;
+    }
     if (!mounted || token != _searchToken) {
       return;
     }
@@ -281,9 +289,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: Text('加载失败，请重试'),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  error is StrokeShardLoadException
+                      ? '笔画资源加载失败，请重试'
+                      : '加载失败，请重试',
+                ),
               ),
               OutlinedButton.icon(
                 onPressed: () =>
@@ -325,11 +337,12 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           }
 
           final strokeNames = _resolveStrokeNames(entry);
-          // 组词/中文释义来自懒加载的离线数据集; 未就绪时先显示加载态,
-          // 就绪后缺失才回退到内置词表, 再退到"词库建设中"占位。
-          final wordsAsync = ref.watch(wordsForCharProvider(entry.char));
-          final definitionAsync = ref.watch(definitionZhProvider(entry.char));
-          final datasetWords = wordsAsync.valueOrNull;
+          // 组词/中文释义共用一次按字分片加载(~33KB, 一次解码同时供应
+          // 两区); 两个区块都折叠时不发起任何参考数据请求。
+          final referenceAsync = (_explanationExpanded || _wordsExpanded)
+              ? ref.watch(referenceForCharProvider(entry.char))
+              : null;
+          final datasetWords = referenceAsync?.valueOrNull?.words;
           final wordCards = _resolveWordCards(entry, datasetWords);
           final definitions = _resolveDefinitions(entry);
 
@@ -399,7 +412,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                           });
                         },
                         child: _buildExplanationBlock(
-                            entry, definitions, definitionAsync),
+                            entry, definitions, referenceAsync),
                       ),
                       const SizedBox(height: 10),
                       _SectionCard(
@@ -410,7 +423,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                             _wordsExpanded = !_wordsExpanded;
                           });
                         },
-                        child: _buildWordsGrid(wordsAsync, wordCards),
+                        child: _buildWordsGrid(referenceAsync, wordCards),
                       ),
                     ],
                   ),
@@ -446,15 +459,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               size: 32,
             ),
           ),
-          IconButton(
-            tooltip: '会员',
-            onPressed: () => _showSnack('会员能力展示占位'),
-            icon: const Icon(
-              Icons.diamond_rounded,
-              color: Colors.redAccent,
-              size: 30,
-            ),
-          ),
+          // 会员入口在业务定义明确前先隐藏, 避免不可完成的占位点击。
           IconButton(
             tooltip: '屏幕亮度',
             onPressed: _showBrightnessSheet,
@@ -608,9 +613,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   Widget _buildExplanationBlock(
     CharacterEntry entry,
     List<String> definitions,
-    AsyncValue<String?> zhDefinitionAsync,
+    AsyncValue<CharReference>? referenceAsync,
   ) {
-    final zhDefinition = zhDefinitionAsync.valueOrNull;
+    final zhDefinition = referenceAsync?.valueOrNull?.definition;
+    final referenceFailed = referenceAsync?.hasError ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -622,7 +628,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           ),
         ),
         const SizedBox(height: 12),
-        if (zhDefinitionAsync.isLoading) ...<Widget>[
+        if (referenceFailed) _referenceFailureHint(entry.char),
+        if (referenceAsync?.isLoading ?? false) ...<Widget>[
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 10),
             child: Center(
@@ -683,9 +690,40 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     );
   }
 
+  /// 参考分片读取失败时的可见降级提示:内容走内置兜底,并提供重试。
+  Widget _referenceFailureHint(String char) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: <Widget>[
+          const Icon(Icons.cloud_off_outlined,
+              size: 16, color: Color(0xFF9A8A8A)),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text(
+              '组词/释义数据加载失败，已显示内置内容',
+              style: TextStyle(fontSize: 13, color: Color(0xFF9A8A8A)),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => ref.refresh(referenceForCharProvider(char)),
+            child: const Text(
+              '重试',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppPalette.primaryBrown,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildWordsGrid(
-      AsyncValue<List<WordCard>?> wordsAsync, List<WordCard> words) {
-    if (wordsAsync.isLoading) {
+      AsyncValue<CharReference>? wordsAsync, List<WordCard> words) {
+    if (wordsAsync?.isLoading ?? false) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 18),
         child: Center(

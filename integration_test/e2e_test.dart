@@ -10,8 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:web/web.dart' as web;
 
-/// End-to-end flows against the REAL asset pipeline (index + shards +
-/// words + definitions) and the REAL app shell. Run on a real browser:
+/// End-to-end flows against the REAL asset pipeline (index + stroke
+/// shards + reference shards) and the REAL app shell. Run on a real browser:
 ///
 ///   flutter drive -d chrome --headless \
 ///     --driver=test_driver/integration_test.dart \
@@ -235,21 +235,22 @@ void main() {
     await gotoDetail(tester, '火');
     expect(find.text('4'), findsWidgets); // 笔画数 4
 
-    // 组词/中文释义为懒加载, 轮询直到数据集就绪。
+    // 组词/中文释义共用一次按字参考分片加载, 轮询直到数据就绪。
     var wordsReady = false;
     var zhReady = false;
     for (var i = 0; i < 20 && !(wordsReady && zhReady); i += 1) {
-      final words = container.read(wordsForCharProvider('火')).valueOrNull;
-      final zh = container.read(definitionZhProvider('火')).valueOrNull;
-      wordsReady = words != null && words.isNotEmpty;
-      zhReady = zh != null && zh.isNotEmpty;
+      final reference = container.read(referenceForCharProvider('火')).valueOrNull;
+      wordsReady = reference != null && reference.words.isNotEmpty;
+      zhReady = reference != null &&
+          reference.definition != null &&
+          reference.definition!.isNotEmpty;
       if (!(wordsReady && zhReady)) {
         await Future<void>.delayed(const Duration(milliseconds: 200));
         await tester.pump();
       }
     }
-    expect(wordsReady, isTrue, reason: 'words.json 应包含「火」');
-    expect(zhReady, isTrue, reason: 'definitions_zh.json 应包含「火」');
+    expect(wordsReady, isTrue, reason: '参考分片应包含「火」的组词');
+    expect(zhReady, isTrue, reason: '参考分片应包含「火」的中文释义');
     // 数据就绪后还要等一帧让词卡真正上树。
     await waitReal(tester, const Duration(milliseconds: 600));
 
@@ -377,14 +378,14 @@ void main() {
     await launchApp(tester);
     await gotoDetail(tester, '母');
 
-    // 等待懒加载的组词数据集
+    // 等待懒加载的参考分片(组词)
     List<WordCard>? words;
     for (var i = 0; i < 30 && (words == null || words.isEmpty); i += 1) {
       await Future<void>.delayed(const Duration(milliseconds: 300));
       await tester.pump();
-      words = container.read(wordsForCharProvider('母')).valueOrNull;
+      words = container.read(referenceForCharProvider('母')).valueOrNull?.words;
     }
-    expect(words, isNotNull, reason: 'words.json 应包含「母」');
+    expect(words, isNotNull, reason: '参考分片应包含「母」的组词');
     expect(words!.first.pinyin, isNotNull, reason: '词卡应带拼音');
 
     // 等一帧让词卡上树, 再滚动到可视区点击。

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
+import '../../../core/application/perf_log.dart';
 import '../domain/character_entry.dart';
 import '../domain/dictionary_repository.dart';
 import '../domain/filter_criteria.dart';
@@ -64,9 +66,16 @@ class AssetDictionaryRepository implements DictionaryRepository {
 
   bool _loaded = false;
 
+  /// Cold-load dedup: concurrent callers await the same index parse.
+  Future<void>? _loading;
+
   final Map<String, _CharMeta> _metaByChar = <String, _CharMeta>{};
   final Map<String, CharacterEntry> _hydrated = <String, CharacterEntry>{};
-  final Set<int> _loadedShards = <int>{};
+
+  /// In-flight (or completed) shard loads, keyed by shard id. Concurrent
+  /// requests for the same shard await one shared Future instead of
+  /// racing; a failed entry is removed so the next call truly retries.
+  final Map<int, Future<void>> _shardLoads = <int, Future<void>>{};
   final Map<String, List<String>> _byPinyin = <String, List<String>>{};
   final Map<String, List<String>> _byRadical = <String, List<String>>{};
   final Map<int, List<String>> _byStrokeCount = <int, List<String>>{};
@@ -91,9 +100,27 @@ class AssetDictionaryRepository implements DictionaryRepository {
     if (meta == null) {
       return null;
     }
+    if (meta.shard < 0) {
+      return meta.toLightEntry();
+    }
 
+    // A missing/corrupt shard throws StrokeShardLoadException so the UI
+    // can offer a retry — it must not silently yield a stroke-less entry.
     await _loadShard(meta.shard);
-    return _hydrated[char] ?? meta.toLightEntry();
+    final hydrated = _hydrated[char];
+    if (hydrated == null || hydrated.strokes.isEmpty) {
+      throw StrokeShardLoadException(
+        meta.shard,
+        StateError('字「$char」未出现在其分片 ${meta.shard} 的数据中'),
+      );
+    }
+    return hydrated;
+  }
+
+  @override
+  Future<int> shardForChar(String char) async {
+    await _ensureLoaded();
+    return _metaByChar[char]?.shard ?? -1;
   }
 
   @override
@@ -187,12 +214,25 @@ class AssetDictionaryRepository implements DictionaryRepository {
 
   // ---- loading ----
 
-  Future<void> _ensureLoaded() async {
+  Future<void> _ensureLoaded() {
     if (_loaded) {
-      return;
+      return Future<void>.value();
     }
+    // Two cold requests must share one index parse; a failed load clears
+    // the slot so the next caller retries instead of re-awaiting an error.
+    return _loading ??= _loadIndexAndInflate().whenComplete(() {
+      if (!_loaded) {
+        _loading = null;
+      }
+    });
+  }
 
-    final rawIndex = await _bundle.loadString(_indexAssetPath);
+  Future<void> _loadIndexAndInflate() async {
+    final rawIndex = await PerfLog.time(
+      'chars_index read+decode',
+      () => _bundle.loadString(_indexAssetPath),
+      bytesOf: (raw) => raw.length,
+    );
     _parseIndex(rawIndex);
 
     final radicals = await _loadRadicals();
@@ -230,16 +270,32 @@ class AssetDictionaryRepository implements DictionaryRepository {
     }
   }
 
-  Future<void> _loadShard(int shard) async {
-    if (!_loadedShards.add(shard)) {
-      return;
+  /// Loads shard [shard] once, shared by every concurrent caller. The
+  /// completed Future stays cached as the "already loaded" marker; on
+  /// failure the entry is dropped so a later call re-reads the asset.
+  Future<void> _loadShard(int shard) {
+    final inFlight = _shardLoads[shard];
+    if (inFlight != null) {
+      return inFlight;
     }
+
+    final completer = Completer<void>();
+    _shardLoads[shard] = completer.future;
+    _readShardInto(shard, completer);
+    return completer.future;
+  }
+
+  Future<void> _readShardInto(int shard, Completer<void> completer) async {
     final path = '$_shardAssetBase/shard_${shard.toString().padLeft(3, '0')}.json';
     try {
-      final raw = await _bundle.loadString(path);
+      final raw = await PerfLog.time(
+        'stroke shard #$shard read+decode',
+        () => _bundle.loadString(path),
+        bytesOf: (raw) => raw.length,
+      );
       final decoded = jsonDecode(raw);
       if (decoded is! List<dynamic>) {
-        return;
+        throw FormatException('shard 文件必须是数组: $path');
       }
       for (final item in decoded) {
         if (item is! Map<dynamic, dynamic>) {
@@ -250,10 +306,13 @@ class AssetDictionaryRepository implements DictionaryRepository {
           _hydrated[entry.char] = entry;
         }
       }
-    } on Exception {
-      // A missing or corrupt shard must not crash lookups; callers fall
-      // back to the light metadata entry.
-      _loadedShards.remove(shard);
+      completer.complete();
+    } on Exception catch (error) {
+      // Drop this failed load so "重试" actually re-reads the asset.
+      if (identical(_shardLoads[shard], completer.future)) {
+        _shardLoads.remove(shard);
+      }
+      completer.completeError(StrokeShardLoadException(shard, error));
     }
   }
 

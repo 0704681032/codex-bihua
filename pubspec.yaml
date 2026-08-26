@@ -30,6 +30,9 @@ flutter:
     - assets/data/radicals.json
     # Full stroke payloads, loaded on demand by the detail page.
     - assets/data/shards/
-    # Detail-page extras (lazy-loaded once, cached by the OS asset cache):
-    - assets/data/words.json          # CC-CEDICT derived 组词+pinyin
-    - assets/data/definitions_zh.json # 新华字典 derived 中文释义
+    # Per-char reference data (组词+释义), sharded to match the stroke
+    # shards above — the detail page loads only the one shard it needs.
+    # words.json / definitions_zh.json stay in the repo as build
+    # intermediates (inputs to tools/split_reference_data.py) but are no
+    # longer packaged.
+    - assets/data/references/

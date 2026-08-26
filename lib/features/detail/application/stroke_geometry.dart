@@ -30,18 +30,26 @@ class StrokeGeometryCache {
   static final Map<String, StrokeGeometry> _cache = <String, StrokeGeometry>{};
 
   /// Content-verified key: the same char arriving with different stroke
-  /// payloads (hydration timing, test fakes) must not reuse stale geometry.
+  /// payloads (hydration timing, test fakes) must not reuse stale
+  /// geometry. Folds EVERY stroke's SVG into the digest — keying on just
+  /// the first/last stroke let mid-glyph changes collide. String
+  /// hashCodes are cached per instance, so repeat lookups stay cheap.
   static String keyOf(CharacterEntry entry) {
     final strokes = entry.strokes;
-    final first = strokes.isEmpty ? '' : strokes.first.svgPath;
-    final last = strokes.isEmpty ? '' : strokes.last.svgPath;
-    return '${entry.char}|${strokes.length}|${first.hashCode}|${last.hashCode}';
+    var digest = strokes.length;
+    for (final stroke in strokes) {
+      digest = Object.hash(digest, stroke.svgPath);
+    }
+    return '${entry.char}|$digest';
   }
 
   static StrokeGeometry of(CharacterEntry entry) {
     final key = keyOf(entry);
-    final cached = _cache[key];
+    final cached = _cache.remove(key);
     if (cached != null) {
+      // Re-insert so the key lands at the tail: eviction must drop the
+      // least recently USED entry, not the least recently written one.
+      _cache[key] = cached;
       return cached;
     }
 

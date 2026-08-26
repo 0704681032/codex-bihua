@@ -151,10 +151,8 @@ void main() {
         overrides: <Override>[
           dictionaryRepositoryProvider
               .overrideWithValue(FakeDictionaryRepository()),
-          wordsForCharProvider('火')
-              .overrideWith((ref) => Completer<List<WordCard>?>().future),
-          definitionZhProvider('火')
-              .overrideWith((ref) => Completer<String?>().future),
+          referenceForCharProvider('火')
+              .overrideWith((ref) => Completer<CharReference>().future),
         ],
         child: const MaterialApp(
           home: DetailPage(char: '火'),

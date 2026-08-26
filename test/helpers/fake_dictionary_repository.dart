@@ -18,6 +18,12 @@ class FakeDictionaryRepository implements DictionaryRepository {
   @override
   Future<CharacterEntry?> getByChar(String char) async => _byChar[char];
 
+  /// All fake entries share shard 0 — tests that exercise the reference
+  /// shard path override the reference providers themselves.
+  @override
+  Future<int> shardForChar(String char) async =>
+      _byChar.containsKey(char) ? 0 : -1;
+
   @override
   Future<List<CharacterEntry>> searchByChars(List<String> chars) async {
     final result = <CharacterEntry>[];
