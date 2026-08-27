@@ -10,3 +10,5 @@ void setHistoryListener(HistoryListener? listener) {}
 void syncDetailUrl(String char) {}
 
 void syncHomeUrl() {}
+
+void configureEngineUrlStrategy() {}

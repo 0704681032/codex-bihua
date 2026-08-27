@@ -76,8 +76,17 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
   控制台零错误、Dart main 不执行）。给用户演示/测试一律用
   `flutter build web --release` + 静态服务器（如 `python3 -m http.server
   8766 -d build/web`）。
-- 已知小问题（不阻塞）：应用已打开时在地址栏改 hash（如 /#/home →
-  /#/detail/阳）不会切换路由；冷启动深链和应用内导航正常。
+- 已解决（同日）：应用运行中外部修改 hash 不路由。根因两层：
+  ① 片段导航（改 hash/点外链）只触发 `hashchange` 不触发 `popstate`，
+     而应用只监听了后者 → 补了 `hashchange` 监听（同一条
+     readCharFromUrl → 导航链路，popstate/hashchange 连发由目标字去重）；
+  ② 框架默认安装的 SingleEntryStrategy（history.state 标记
+     {"flutter":true}）会把外部片段导航**回滚**到自己的条目（实测改 hash
+     3s 内被打回 '#/'，应用根本收不到最终 URL）→ `setUrlStrategy(null)`
+     （flutter_web_plugins，main 里 runApp 前调用）让框架退场，URL 完全
+     归应用手动管理。E2E-9 覆盖此场景，返回/前进联动（E2E-8）无回归。
+- ⚠️ flutter drive 已知怪癖：用例全部通过打印 "All tests passed!" 之后
+  可能幽灵重启 app 并挂住不退出——以打印的结果为准，杀掉进程即可。
 
 ## 已解决（2026-08-27）：灰笔在黑笔旁「看起来突然加粗」✅
 

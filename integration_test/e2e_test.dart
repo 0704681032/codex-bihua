@@ -95,8 +95,7 @@ void main() {
     await waitReal(tester, const Duration(seconds: 1));
     if (bootedFromUrl) {
       // 深链冷启动必须落在目标详情页, 否则立即失败并给出现场。
-      await waitForText(
-          tester, '「万」的笔顺详情', tries: 30);
+      await waitForText(tester, '万的笔顺详情', tries: 30);
       await tryWaitForText(tester, '3', tries: 20);
     }
   }
@@ -155,7 +154,7 @@ void main() {
   /// 应用内导航到某字详情页: 需要时先回首页再搜索; 整个流程带一轮重试,
   /// 抵御引擎回声吞掉首次点击。
   Future<void> gotoDetail(WidgetTester tester, String char) async {
-    final title = '「$char」的笔顺详情';
+    final title = '$char的笔顺详情';
     if (find.text(title).evaluate().isNotEmpty) {
       return;
     }
@@ -402,7 +401,7 @@ void main() {
 
     // 用本用例专属的字建立干净栈顶, back/forward 只做相对断言。
     await gotoDetail(tester, '永');
-    expect(find.text('「永」的笔顺详情'), findsOneWidget);
+    expect(find.text('永的笔顺详情'), findsOneWidget);
 
     // 模拟浏览器返回:history.back() 触发 popstate → 应用离开「永」详情
     web.window.history.back();
@@ -410,7 +409,7 @@ void main() {
     for (var i = 0; i < 30 && !leftDetail; i += 1) {
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await tester.pump();
-      leftDetail = find.text('「永」的笔顺详情').evaluate().isEmpty;
+      leftDetail = find.text('永的笔顺详情').evaluate().isEmpty;
     }
     expect(leftDetail, isTrue, reason: '返回后应离开详情页');
 
@@ -422,14 +421,38 @@ void main() {
     for (var attempt = 0; attempt < 3 && !backOnDetail; attempt += 1) {
       web.window.history.forward();
       backOnDetail =
-          await tryWaitForText(tester, '「永」的笔顺详情', tries: 10);
+          await tryWaitForText(tester, '永的笔顺详情', tries: 10);
     }
     if (!backOnDetail) {
       web.window.location.hash = AppRouter.detailRouteFor('永');
       web.window.dispatchEvent(web.PopStateEvent('popstate'));
       backOnDetail =
-          await tryWaitForText(tester, '「永」的笔顺详情', tries: 10);
+          await tryWaitForText(tester, '永的笔顺详情', tries: 10);
     }
     expect(backOnDetail, isTrue, reason: '前进应回到详情页');
+  });
+
+  testWidgets('E2E-9 应用运行中外部修改 URL hash 驱动路由', (tester) async {
+    await launchApp(tester);
+    // 建立已知栈顶:首页 → 「火」详情(应用内导航)。
+    await gotoDetail(tester, '火');
+    expect(find.text('火的笔顺详情'), findsOneWidget);
+
+    // 直接编辑地址栏 hash(等价用户改 URL/点外链):片段导航只触发
+    // hashchange, 不触发 popstate —— 路由必须跟随。
+    web.window.location.hash = AppRouter.detailRouteFor('永');
+    final onYong =
+        await tryWaitForText(tester, '永的笔顺详情', tries: 20);
+    expect(onYong, isTrue, reason: '外部修改 hash 应切换到「永」详情页');
+
+    // hash 改回首页 → 应用应回到首页。
+    web.window.location.hash = '#/';
+    var backHome = false;
+    for (var i = 0; i < 20 && !backHome; i += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await tester.pump();
+      backHome = find.text('汉字举例').evaluate().isNotEmpty;
+    }
+    expect(backHome, isTrue, reason: 'hash 改回 #/ 应回到首页');
   });
 }

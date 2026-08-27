@@ -1,5 +1,6 @@
 import 'dart:js_interop';
 
+import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:web/web.dart' as web;
 
 /// Callback invoked when the user navigates browser history
@@ -10,21 +11,36 @@ typedef HistoryListener = void Function(String? char);
 HistoryListener? _listener;
 bool _registered = false;
 
+/// 让框架默认安装的 URL 策略（SingleEntryStrategy，history.state 标记
+/// {"flutter":true}）退场：它会把外部片段导航（改 hash/点外链）回滚到
+/// 自己的条目，与本应用的手动 URL 管理（pushState + popstate/hashchange
+/// 监听）冲突。置 null 后 URL 完全归本文件管理。
+/// 必须在 runApp 之前调用。
+void configureEngineUrlStrategy() {
+  setUrlStrategy(null);
+}
+
 void setHistoryListener(HistoryListener? listener) {
   _listener = listener;
   if (_registered || listener == null) {
     return;
   }
   _registered = true;
-  web.window.addEventListener(
-    'popstate',
-    ((web.PopStateEvent _) {
-      // The browser has already changed the URL; just report it. The
-      // Flutter side must not push another history entry while handling
-      // this navigation.
-      _listener?.call(readCharFromUrl());
-    }).toJS,
-  );
+  void handleHistoryEvent(web.Event _) {
+    // The browser has already changed the URL; just report it. The
+    // Flutter side must not push another history entry while handling
+    // this navigation.
+    _listener?.call(readCharFromUrl());
+  }
+
+  final handler = handleHistoryEvent.toJS;
+  web.window.addEventListener('popstate', handler);
+  // popstate 只在历史遍历（后退/前进）时触发；在地址栏里改 hash、点外链
+  // 或脚本赋值 location.hash 属于片段导航，只触发 hashchange——不监听它
+  // 的话，应用运行中改 URL 就不会路由（冷启动和站内导航不受影响）。
+  // 历史遍历若伴随片段变化会 popstate、hashchange 连发两次，由应用侧
+  // 的目标字去重（第二次调用时路由已就位，直接跳过）。
+  web.window.addEventListener('hashchange', handler);
 }
 
 String? readCharFromUrl() {
