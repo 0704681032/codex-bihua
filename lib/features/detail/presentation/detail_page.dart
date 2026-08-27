@@ -269,7 +269,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('「${widget.char}」的笔顺详情'),
+        title: Text('${widget.char}的笔顺详情'),
         leading: IconButton(
           tooltip: '返回',
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
@@ -681,7 +681,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             ),
             icon: const Icon(Icons.menu_book_rounded),
             label: Text(
-              '「${entry.char}」字的百科解释',
+              '${entry.char}字的百科解释',
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
           ),
@@ -1028,7 +1028,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         ? ''
         : words.take(4).map((card) => card.word).join('、');
     final pinyin = entry.pinyin.trim();
-    return '「${entry.char}」读作${pinyin.isEmpty ? '（待补充）' : pinyin}。'
+    return '${entry.char}读作${pinyin.isEmpty ? '（待补充）' : pinyin}。'
         '部首为${entry.radical}，共${entry.strokeCount}画。'
         '${wordText.isEmpty ? '' : '常见组词：$wordText。'}';
   }
@@ -1082,7 +1082,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               _infoRow('笔画数', '${entry.strokeCount}'),
               _infoRow(
                 '笔顺',
-                strokeNames.isEmpty ? '待补充' : strokeNames.join(' → '),
+                strokeNames.isEmpty ? '待补充' : strokeNames.join(' · '),
               ),
               const Divider(height: 22),
               const Align(

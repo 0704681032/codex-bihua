@@ -128,16 +128,40 @@ class _StrokeCanvasPainter extends CustomPainter {
     final fillPaint = Paint()..style = PaintingStyle.fill;
 
     for (var i = 0; i < paths.length; i += 1) {
-      final path = paths[i];
-      final done = state.completed || i < state.currentStrokeIndex;
-      final color = done ? AppPalette.strokeBlack : AppPalette.strokeGrey;
+      if (!(state.completed || i < state.currentStrokeIndex)) {
+        continue;
+      }
       _paintStrokeShape(
         canvas: canvas,
-        path: path,
-        color: color,
+        path: paths[i],
+        color: AppPalette.strokeBlack,
         linePaint: linePaint,
         fillPaint: fillPaint,
       );
+    }
+
+    // 待写笔画画进一层「幽灵墨」：层内用不透明墨色保证重叠处颜色均匀，
+    // 整层低透明度合成后叠在黑笔上还原成墨色本身——圆头端帽不再从黑底
+    // 里显形（读作笔画「突然加粗」）。勿改回不透明浅灰；勿用 Path.combine
+    // 合并多笔轮廓（web CanvasKit 的 union 会吞字腔），取证记录见
+    // AGENTS.md 2026-08-25 待办。
+    final hasGhost =
+        !state.completed && state.currentStrokeIndex < paths.length;
+    if (hasGhost) {
+      canvas.saveLayer(null, Paint()..color = AppPalette.strokeGhost);
+      for (var i = 0; i < paths.length; i += 1) {
+        if (state.completed || i < state.currentStrokeIndex) {
+          continue;
+        }
+        _paintStrokeShape(
+          canvas: canvas,
+          path: paths[i],
+          color: AppPalette.strokeBlack,
+          linePaint: linePaint,
+          fillPaint: fillPaint,
+        );
+      }
+      canvas.restore();
     }
 
     if (!state.completed &&

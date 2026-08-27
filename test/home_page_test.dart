@@ -34,7 +34,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.search_rounded).first);
     await tester.pumpAndSettle();
 
-    expect(find.text('「笔」的笔顺详情'), findsOneWidget);
+    expect(find.text('笔的笔顺详情'), findsOneWidget);
   });
 
   testWidgets(

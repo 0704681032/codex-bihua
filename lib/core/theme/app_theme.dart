@@ -8,7 +8,10 @@ class AppPalette {
   static const Color textMain = Color(0xFF3A2626);
   static const Color guideRed = Color(0xFFFF4B5C);
   static const Color strokeBlack = Color(0xFF24242A);
-  static const Color strokeGrey = Color(0xFFCFCFD4);
+  // 「幽灵墨」图层色：仅透明度参与合成（saveLayer 只取其 alpha ≈ 16.5%），
+  // 图层内容用不透明 strokeBlack 绘制；整层叠在画布底色上合成 ≈ #CFD0D3，
+  // 与旧实心灰 #CFCFD4 观感一致。取证与约束见 AGENTS.md 2026-08-25 待办。
+  static const Color strokeGhost = Color(0x2B24242A);
   static const Color white = Colors.white;
 }
 
@@ -24,6 +27,8 @@ ThemeData buildAppTheme() {
 
   return ThemeData(
     useMaterial3: true,
+    // 随包中文字体（见 pubspec fonts 段），避免运行时 CDN 字体缺失。
+    fontFamily: 'NotoSansSC',
     colorScheme: colorScheme,
     scaffoldBackgroundColor: AppPalette.pageBg,
     textTheme: const TextTheme(

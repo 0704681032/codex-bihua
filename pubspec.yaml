@@ -24,6 +24,16 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # 中文随包字体：CanvasKit 默认从 fonts.gstatic.com 按 unicode 区块
+  # 运行时下载 Noto 回退字体，墙内/代理下部分区块会静默失败 → 大量
+  # 汉字渲染成 ☒ 豆腐块。随包内置于 FontManifest 后不再依赖 CDN。
+  # 生成方式见 tools/build_font_subset.py。
+  fonts:
+    - family: NotoSansSC
+      fonts:
+        - asset: assets/fonts/NotoSansSC-Regular.ttf
+        - asset: assets/fonts/NotoSansSC-Bold.ttf
+          weight: 700
   assets:
     # Light per-char metadata (~435 KB): everything the home page needs.
     - assets/data/chars_index.json

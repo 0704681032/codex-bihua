@@ -58,47 +58,59 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
 - [x] 笔画名称分类器 —— 双轨制：cnchar-order 权威名称（6807 字）+ `StrokeClassifier` 几何回退（重构为独立模块）；32 字官方金样集回归测试通过
 - [x] 浏览器返回键联动 —— URL pushState + popstate 监听 + NavigatorObserver 统一同步（`app.dart` / `web_url_web.dart`）
 
-## 待办（2026-08-25 记录）：灰笔在黑笔旁「看起来突然加粗」
+## 已解决（2026-08-27）：release 构建 web 中文豆腐块 ☒ ✅
 
-- [ ] 现象：播放到「阳」后两笔（日内短横）时，灰色横杠显得突然变粗。
-- [ ] 已查明（像素级测量，非墨迹变粗）：灰色横杠厚度在所有播放状态下恒定
-      （约 33~40 设备px / 11~13 逻辑px）；观感变化来自交接处——字库轮廓在
-      笔画交接处互相重叠，全灰时同色重叠不可见，前序笔画变黑后灰色横杠的
-      圆头端帽/重叠区以黑为衬底显形，读作「加粗」。
-- [ ] 已试并搁置：两遍绘制（先灰后黑，黑压灰）——凸起仍在，且测量发现
-      个别列灰色游程出现 12/11 断裂（疑似黑笔轮廓啃掉灰笔边缘的新伪影），
-      该实验已回退，勿直接重用。
-- [ ] 候选方向（明天从这里开始）：
-      a) 灰色未完成笔画合并成单一 silhouette（`Path.combine(PathOperation.union)`）
-         再填充，消除内部重叠与接缝；
-      b) 调大灰色与黑色的明度差或给灰笔描一圈更浅的边，降低黑底衬出的轮廓感；
-      c) 数据侧：生成字库时对交接处做去重叠处理（成本高，最后考虑）。
-- [ ] 复现/测量方法：widget test 里 `RepaintBoundary` 只包 300×300 画布，
-      `tester.runAsync(() => boundary.toImage(pixelRatio: 3))` 取 rawRGBA，
-      按列统计 `strokeGrey(0xFFCFCFD4)` 竖向游程；注意 toImage 不包在
-      runAsync 里会永久挂起。
+- 现象：`flutter build web --release` 后大量汉字渲染成 ☒（且每个浏览器不同：
+  无头直连 Chrome 完美、走代理/内嵌浏览器烂一片），debug `flutter run` 却正常。
+- 根因：CanvasKit 渲染器的中文回退字体在运行时从 fonts.gstatic.com 按
+  unicode 区块分块下载，墙内/代理下部分区块静默失败 → 命中区块的字全部
+  tofu。debug 会话曾正常纯属缓存运气。这是墙内真实用户必踩的生产级问题。
+- 修复：中文随包字体。`tools/build_font_subset.py` 从 Noto Sans SC 可变字体
+  （下载地址在脚本头部，需代理）实例化 wght 400/700 并按应用实际字符集
+  （lib 字符串 + 字库/组词/释义 JSON + 拼音音标 + CJK 标点，1.1 万字符）
+  裁剪出 ~3.9MB×2 的 TTF，经 pubspec `fonts:` 进 FontManifest，主题设
+  `fontFamily: 'NotoSansSC'`。不再依赖 CDN，任何网络确定性渲染。
+  ⚠️ 新增 UI 文案/字库数据后需重跑该脚本，否则新字符仍走 CDN 回退。
+- 注意：`flutter run` debug 服务器连续重启后可能进入坏状态——对它自己
+  拉起的 Chrome 正常、对其它浏览器静默白屏（main.dart.js 仅 8.7KB stub、
+  控制台零错误、Dart main 不执行）。给用户演示/测试一律用
+  `flutter build web --release` + 静态服务器（如 `python3 -m http.server
+  8766 -d build/web`）。
+- 已知小问题（不阻塞）：应用已打开时在地址栏改 hash（如 /#/home →
+  /#/detail/阳）不会切换路由；冷启动深链和应用内导航正常。
+
+## 已解决（2026-08-27）：灰笔在黑笔旁「看起来突然加粗」✅
+
+- 根因（像素级取证）：灰杠厚度全程恒定（~33-40 设备px），非真变粗。待写笔画
+  用**不透明**浅灰（#CFCFD4）且绘制在黑笔之后，圆头端帽伸进黑笔画范围，
+  在黑底上显形成亮灰轮廓，读作「加粗」。
+- 最终方案：**幽灵墨图层**（不改几何、纯合成）。待写笔画画进一个
+  `saveLayer` 图层，层内用不透明墨色 strokeBlack（重叠处颜色均匀、交接处
+  不显形），整层以 16.5% alpha 叠加（`AppPalette.strokeGhost =
+  Color(0x2B24242A)`，saveLayer 只取其透明度）。合成数学：
+  叠底色 ≈ #CFD0D3（与旧灰观感一致）；叠黑笔精确还原成墨色（端帽隐形）；
+  叠红笔加深 ~13%（读作墨层叠合）；完成态不建图层，逐像素不变。
+- 历史教训（前三次尝试均回退，勿重走）：
+  ① 两遍绘制（先灰后黑）——凸起仍在 + 黑啃灰新伪影；
+  ② 黑剪影外缘描底色细缝——播放中整字碎裂；
+  ③ `Path.combine(union)` 整字剪影——**web CanvasKit 吞字腔**（fillType
+     nonZero/evenOdd 与宿主 Skia 分歧，同一代码两引擎几何结果不同）。
+  约束不变：任何依赖 `Path.combine` 多笔合并的方案在 web 上不可用。
+- 验证闭环（2026-08-27 全绿）：
+  - 宿主金样矩阵：`flutter test --update-goldens` 重生成 yang/字 两套，
+    14_complete 与基线**逐字节一致**；idle 观感一致；交接态端帽消失。
+  - 全量 `flutter test` 62/62。
+  - **CanvasKit 像素探针** `integration_test/canvas_probe_test.dart`
+    （flutter drive headless Chrome）：透明度真引擎生效、左右端帽压黑区
+    精确还原墨色、三种状态「日」字腔全程镂空（防 union 吞腔回归）。
+  - ⚠️ 探针/集成测试取字例数据必须走 `AssetDictionaryRepository` 分片链路
+    —— chars_3500.json 已不在 pubspec 资产清单，web 上 rootBundle 404
+    （宿主测试 dart:io 直读文件所以不暴露）。
+- 已知微小观感变化：灰笔经过处米字格红虚线隐约透出（原被不透明灰盖住，
+  幅度 ~16%，似铅笔稿压辅助线）；灰笔与红笔交接处红轻微加深（即修复目标）。
 
 ### 后续可选优化
 
 - 首页性能已解决（38MB→435KB 索引启动）。若需进一步优化详情页首开，可把分片粒度从 256 字降到 64 字。
 - `definitions_zh.json` 约 3.9MB，如嫌大可截断 more 字段或按需分片。
 - 数据再生成完整流程见 `docs/字库更新指南.md`（含源头更新、降级行为、测试校验）。
-
-
-## 待办（2026-08-25）：灰笔在黑笔旁「看起来突然加粗」——三次修复尝试均已回退 ⚠️
-
-- [ ] 现象：播放到「阳」后两笔（日内短横）时，灰色横杠显得突然变粗（像素级测量：
-      灰杠厚度恒定 ~33-40 设备px，非真变粗；观感来自笔画交接处的轮廓重叠）。
-- 尝试过并全部回退（本地已 reset 回 e6af5d0）：
-      ① 两遍绘制（先灰后黑）——凸起仍在，且黑笔轮廓啃灰笔边缘出新伪影；
-      ② 黑剪影外缘描底色细缝——切开红笔/灰笔与黑笔的连接，播放中整字碎裂；
-      ③ **整字 union 剪影**（`Path.combine(union)` 合并全部轮廓做灰影层）——
-        宿主 Skia 正常，但 **web/CanvasKit 的 `Path.combine(union)` 会吞掉字腔**
-        （「日」的内部白洞被填实，完成态整个字变黑疙瘩）。
-        探针实证（2026-08-25，Chrome headless + CanvasKit）：
-        单笔原始路径字腔 G=255 透出 ✓；`Path.combine(union)` 后 G=0 被填 ✗；
-        且 union 结果 fillType 在 web 为 nonZero、`contains(字腔点)=true`，
-        宿主为 evenOdd、contains=false —— 同一代码两引擎几何结果不同。
-- 结论/约束：**任何依赖 `Path.combine` 多笔合并的方案在 web 上不可用**，
-  除非按平台分叉或先做多边形布尔自算。下次再攻此问题请从「不改几何、只改
-  观感」入手（如灰墨透明度/色相微调、交接处抗性纹理）。
