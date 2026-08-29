@@ -2,9 +2,16 @@
 
 """Build the app dictionary JSON from Make Me a Hanzi source files.
 
-The script accepts either local file paths or HTTPS URLs for `graphics.txt`
-and `dictionary.txt`, merges them on the shared `character` key, and writes
-the project-specific array schema used by the Flutter app.
+Two modes:
+
+* Legacy: pass ``--graphics`` and ``--dictionary`` (paths or HTTPS URLs).
+  Merges both on the shared ``character`` key into the app schema.
+* Upgrade: pass ``--hanzi-writer-data DIR`` and ``--upgrade-from FILE``.
+  Takes strokes/medians from the hanzi-writer-data per-character JSON files
+  (https://github.com/chanind/hanzi-writer-data — the actively maintained
+  fork of Make Me a Hanzi graphics) and inherits pinyin/radical/examples
+  from an existing app dictionary, pinning the character set and order.
+  Hard-fails if any existing character is missing from the new source.
 """
 
 from __future__ import annotations
@@ -43,13 +50,23 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--graphics",
-        required=True,
-        help="Path or HTTPS URL to graphics.txt",
+        help="Path or HTTPS URL to graphics.txt (legacy mode)",
     )
     parser.add_argument(
         "--dictionary",
-        required=True,
-        help="Path or HTTPS URL to dictionary.txt",
+        help="Path or HTTPS URL to dictionary.txt (legacy mode)",
+    )
+    parser.add_argument(
+        "--hanzi-writer-data",
+        default=None,
+        help="Directory of per-character JSON files extracted from the "
+        "hanzi-writer-data npm package (upgrade mode)",
+    )
+    parser.add_argument(
+        "--upgrade-from",
+        default=None,
+        help="Existing app dictionary JSON whose character set, order and "
+        "pinyin/radical/examples metadata are kept (upgrade mode)",
     )
     parser.add_argument(
         "--output",
@@ -61,7 +78,22 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Write indented JSON instead of compact JSON.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    legacy = bool(args.graphics or args.dictionary)
+    upgrade = bool(args.hanzi_writer_data or args.upgrade_from)
+    if legacy and upgrade:
+        parser.error(
+            "--graphics/--dictionary and --hanzi-writer-data/--upgrade-from "
+            "are mutually exclusive modes"
+        )
+    if legacy and not (args.graphics and args.dictionary):
+        parser.error("legacy mode needs both --graphics and --dictionary")
+    if upgrade and not (args.hanzi_writer_data and args.upgrade_from):
+        parser.error(
+            "upgrade mode needs both --hanzi-writer-data and --upgrade-from"
+        )
+    return args
 
 
 def read_text(path_or_url: str) -> str:
@@ -188,6 +220,35 @@ def load_dictionary(source: str) -> dict[str, dict]:
     return result
 
 
+def strokes_from_raw(
+    char: str, strokes_raw: object, medians_raw: object
+) -> list[dict]:
+    """Normalize raw stroke path strings + median polylines into app schema."""
+    if not isinstance(strokes_raw, list):
+        return []
+    if not isinstance(medians_raw, list):
+        medians_raw = []
+
+    strokes: list[dict] = []
+    for index, path in enumerate(strokes_raw, start=1):
+        if not isinstance(path, str):
+            continue
+        svg_path = path.strip()
+        if not svg_path:
+            continue
+        median_points = normalize_points(
+            medians_raw[index - 1] if index - 1 < len(medians_raw) else []
+        )
+        strokes.append(
+            {
+                "order": len(strokes) + 1,
+                "svgPath": svg_path,
+                "medianPoints": median_points,
+            }
+        )
+    return strokes
+
+
 def load_graphics(source: str) -> tuple[list[str], dict[str, list[dict]]]:
     order: list[str] = []
     result: dict[str, list[dict]] = {}
@@ -197,31 +258,9 @@ def load_graphics(source: str) -> tuple[list[str], dict[str, list[dict]]]:
         if len(char) != 1:
             continue
 
-        strokes_raw = item.get("strokes")
-        medians_raw = item.get("medians")
-        if not isinstance(strokes_raw, list):
-            continue
-        if not isinstance(medians_raw, list):
-            medians_raw = []
-
-        strokes: list[dict] = []
-        for index, path in enumerate(strokes_raw, start=1):
-            if not isinstance(path, str):
-                continue
-            svg_path = path.strip()
-            if not svg_path:
-                continue
-            median_points = normalize_points(
-                medians_raw[index - 1] if index - 1 < len(medians_raw) else []
-            )
-            strokes.append(
-                {
-                    "order": len(strokes) + 1,
-                    "svgPath": svg_path,
-                    "medianPoints": median_points,
-                }
-            )
-
+        strokes = strokes_from_raw(
+            char, item.get("strokes"), item.get("medians")
+        )
         if not strokes:
             continue
 
@@ -230,6 +269,35 @@ def load_graphics(source: str) -> tuple[list[str], dict[str, list[dict]]]:
         order.append(char)
         result[char] = strokes
     return order, result
+
+
+def load_hanzi_writer(source_dir: str) -> dict[str, list[dict]]:
+    """Load per-character JSON files from the hanzi-writer-data package."""
+    directory = Path(source_dir)
+    if not directory.is_dir():
+        raise ValueError(f"hanzi-writer-data directory not found: {directory}")
+
+    result: dict[str, list[dict]] = {}
+    for path in sorted(directory.glob("*.json")):
+        char = path.stem
+        if len(char) != 1:
+            continue
+        try:
+            decoded = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{path.name} is not valid JSON: {exc}") from exc
+
+        strokes = strokes_from_raw(
+            char, decoded.get("strokes"), decoded.get("medians")
+        )
+        if not strokes:
+            continue
+
+        validate_strokes(char, strokes)
+        result[char] = strokes
+    if not result:
+        raise ValueError(f"no character JSON files found under {directory}")
+    return result
 
 
 def build_entries(
@@ -282,6 +350,69 @@ def build_entries(
     return entries, stats
 
 
+def build_entries_upgrade(
+    old_entries: list[dict], hanzi_writer: dict[str, list[dict]]
+) -> tuple[list[dict], dict]:
+    """Swap strokes/medians in-place against an existing app dictionary.
+
+    Keeps the character set, order and all metadata identical so that the
+    index, reference shards and font subset stay byte-stable except for the
+    characters whose geometry the hanzi-writer-data project fixed.
+    """
+    entries: list[dict] = []
+    stats = {
+        "identical": 0,
+        "svg_changed": [],
+        "median_changed": [],
+        "count_changed": [],
+        "skipped_extra": [],
+        "missing": [],
+    }
+
+    for old in old_entries:
+        char = old["char"]
+        new_strokes = hanzi_writer.get(char)
+        if new_strokes is None:
+            stats["missing"].append(char)
+            continue
+
+        old_strokes = old["strokes"]
+        if len(new_strokes) != len(old_strokes):
+            stats["count_changed"].append(
+                (char, len(old_strokes), len(new_strokes))
+            )
+        elif new_strokes != old_strokes:
+            svg_differs = any(
+                new["svgPath"] != old["svgPath"]
+                for new, old in zip(new_strokes, old_strokes)
+            )
+            (stats["svg_changed"] if svg_differs else stats["median_changed"]).append(char)
+        else:
+            stats["identical"] += 1
+
+        entries.append(
+            {
+                "char": char,
+                "pinyin": old["pinyin"],
+                "radical": old["radical"],
+                "strokeCount": len(new_strokes),
+                "strokes": new_strokes,
+                "examples": old.get("examples", []),
+            }
+        )
+
+    if stats["missing"]:
+        preview = ", ".join(stats["missing"][:10])
+        raise ValueError(
+            f"hanzi-writer-data is missing {len(stats['missing'])} "
+            f"characters present in --upgrade-from: {preview}"
+        )
+
+    old_chars = {old["char"] for old in old_entries}
+    stats["skipped_extra"] = sorted(set(hanzi_writer) - old_chars)
+    return entries, stats
+
+
 def write_output(entries: list[dict], output_path: Path, pretty: bool) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = output_path.with_suffix(output_path.suffix + ".tmp")
@@ -297,6 +428,42 @@ def write_output(entries: list[dict], output_path: Path, pretty: bool) -> None:
 
 def main() -> int:
     args = parse_args()
+
+    if args.hanzi_writer_data:
+        old_entries = json.loads(
+            Path(args.upgrade_from).read_text(encoding="utf-8")
+        )
+        if not isinstance(old_entries, list) or not old_entries:
+            raise ValueError(f"--upgrade-from has no entries: {args.upgrade_from}")
+        hanzi_writer = load_hanzi_writer(args.hanzi_writer_data)
+        entries, stats = build_entries_upgrade(old_entries, hanzi_writer)
+        output_path = Path(args.output)
+        write_output(entries, output_path, pretty=args.pretty)
+
+        print(f"output: {output_path}")
+        print(f"upgrade-from: {args.upgrade_from}")
+        print(f"hanzi-writer-data chars: {len(hanzi_writer)}")
+        print(f"written entries: {len(entries)}")
+        print(f"identical geometry: {stats['identical']}")
+        print(
+            "svg changed: "
+            f"{len(stats['svg_changed'])} -> {''.join(stats['svg_changed'])}"
+        )
+        print(
+            "median changed: "
+            f"{len(stats['median_changed'])} -> "
+            f"{''.join(stats['median_changed'])}"
+        )
+        print(
+            "stroke count changed: "
+            f"{len(stats['count_changed'])} -> {stats['count_changed']}"
+        )
+        print(
+            "skipped (not in old set): "
+            f"{len(stats['skipped_extra'])} -> {''.join(stats['skipped_extra'])}"
+        )
+        return 0
+
     ordered_chars, graphics = load_graphics(args.graphics)
     dictionary = load_dictionary(args.dictionary)
     entries, stats = build_entries(ordered_chars, graphics, dictionary)

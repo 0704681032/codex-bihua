@@ -19,3 +19,6 @@ package/
 
 # Flutter crash reports
 flutter_*.log
+
+# Local AI-tool session artifacts (screenshots etc.)
+.claude/

@@ -165,7 +165,7 @@ void main() {
         }
       }
     }
-    final totalProbed = 31 * 31;
+    const totalProbed = 31 * 31;
     expect(
       inkCount >= totalProbed * 0.98,
       isTrue,

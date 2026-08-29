@@ -43,6 +43,18 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
 - 未装 Android SDK → 不能构建 Android
 - Web（Chrome/Edge）可用 ✅
 
+## Windows 侧补充（2026-08-29）
+
+- **数据更新（词库/字形/释义）的标准提示词已固化在 `docs/字库更新指南.md` 开头**——用户说"更新词库"等模糊诉求时，按该文档对应场景执行即可。
+- **Python 走 `py` 启动器**（`python`/`python3` 是 WindowsApps 空壳无输出），如 `py tools/build_chars_dictionary.py ...`。
+- **字形数据源已升级为 hanzi-writer-data 2.0.1**（makemeahanzi 活跃维护派生，Arphic 许可，同坐标同格式）：`build_chars_dictionary.py --hanzi-writer-data <解包目录> --upgrade-from assets/data/chars_3500.json`，字符集/元数据锁定、差异报告自动打印。详见 `docs/hanzi-writer-data升级-2026-08-29.md`。数据源下载走 npmmirror 直连（无需代理）。
+- **Windows 上 `flutter drive` Web E2E 暂未跑通**，已排查并确认的坑（勿重走）：
+  1. 冷启动首次编译 >10 分钟是正常的（`frontend_server` 跑在 **dartaotruntime.exe** 进程里，别只盯 dart.exe 的 CPU 判断死活）；
+  2. `flutter drive` 要求**外部预先起好** chromedriver（`--port=4444`），它不会自己拉起；
+  3. `C:\SeleniumDrivers` 里的 chromedriver 是 110，与 Chrome 152 不匹配；匹配版驱动已下载到 `tools/cache/cdt/chromedriver-win64/`（来源 npmmirror 的 chrome-for-testing 镜像）；
+  4. `flutter test -d chrome` 对 integration_test **直接不支持**（"Web devices are not supported for integration tests yet"）；
+  5. 即便 1~3 全部就位，本机（用户 Chrome 常驻 + 系统代理 127.0.0.1:7897）drive 仍挂在 resident runner 拉起浏览器一步，原因未明——**Windows 侧 E2E 用「release 构建 + 静态服务器 + 真浏览器人工核验」替代**，drive 断言以 Mac 侧为准。
+
 ## 明日待办（2026-08-24 已完成 ✅）
 
 - [x] 端到端测试补齐并全绿：integration_test/e2e_test.dart 8 个用例（深链冷启动/首页渲染/搜索全量数据/播放状态机/速度切换/TTS/词卡/浏览器返回前进联动），`flutter drive -d chrome --headless` 全过
